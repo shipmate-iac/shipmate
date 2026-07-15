@@ -2,7 +2,9 @@
 """Compute the preview plan matrix: changed stacks x their env tags -> cells.
 
 Pure core (build_matrix) is unit-tested; main() gathers inputs from terramate
-+ the GitHub Environments API and writes GitHub Actions job outputs.
+(the changed stack set + each stack's tags) and writes GitHub Actions job
+outputs. Environment membership comes purely from stack tags (CONTRACT tag
+grammar: env/<name>) -- no GitHub API or token required.
 """
 import json
 import os
@@ -36,21 +38,16 @@ def build_matrix(envs, stacks_by_env, tags_by_stack):
 
 
 def _run(args):
-    return subprocess.run(args, capture_output=True, text=True, check=True).stdout
+    p = subprocess.run(args, capture_output=True, text=True)
+    if p.returncode != 0:
+        # Surface the tool's own error; a swallowed stderr makes CI opaque.
+        sys.stderr.write(p.stderr)
+        raise SystemExit(f"::error::command failed ({p.returncode}): {' '.join(args)}")
+    return p.stdout
 
 
-def _plan_envs():
-    repo = os.environ["GITHUB_REPOSITORY"]
-    out = _run(["gh", "api", f"repos/{repo}/environments", "--paginate",
-                "--jq", ".environments[].name"])
-    names = [n.strip() for n in out.splitlines() if n.strip()]
-    # Drop the apply half of the plan/apply split; dedupe; stable order.
-    plan = sorted({n for n in names if not n.endswith("-apply")})
-    return plan
-
-
-def _changed_stacks(env, base):
-    args = ["terramate", "list", "--changed", "--tags", f"env/{env}"]
+def _changed_stacks(base):
+    args = ["terramate", "list", "--changed"]
     if base:
         args += ["-B", base]
     return [s.strip() for s in _run(args).splitlines() if s.strip()]
@@ -63,10 +60,15 @@ def _tags(stack):
 
 def main():
     base = os.environ.get("SHIPMATE_BASE_SHA", "")
-    envs = _plan_envs()
-    stacks_by_env = {e: _changed_stacks(e, base) for e in envs}
-    all_stacks = {s for lst in stacks_by_env.values() for s in lst}
-    tags_by_stack = {s: _tags(s) for s in all_stacks}
+    changed = _changed_stacks(base)
+    tags_by_stack = {s: _tags(s) for s in changed}
+    # Fan out each changed stack to every environment it is tagged into.
+    stacks_by_env = {}
+    for s in changed:
+        for t in tags_by_stack[s]:
+            if t.startswith("env/"):
+                stacks_by_env.setdefault(t[len("env/"):], []).append(s)
+    envs = sorted(stacks_by_env)
     cells = build_matrix(envs, stacks_by_env, tags_by_stack)
     out_path = os.environ["GITHUB_OUTPUT"]
     with open(out_path, "a", encoding="utf-8") as fh:

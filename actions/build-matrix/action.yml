@@ -4,9 +4,6 @@ inputs:
   base-sha:
     description: Base commit to diff against for change detection (PR base SHA).
     required: true
-  github-token:
-    description: Token with repo read for the Environments API.
-    required: true
 outputs:
   matrix:
     description: 'JSON {"include":[{stack,environment,workload},...]} for the plan matrix.'
@@ -21,5 +18,4 @@ runs:
       shell: bash
       env:
         SHIPMATE_BASE_SHA: ${{ inputs.base-sha }}
-        GH_TOKEN: ${{ inputs.github-token }}
       run: python3 "$GITHUB_ACTION_PATH/../../scripts/build-matrix"
