@@ -11,23 +11,35 @@ inputs:
     description: '"restore" (before plan/apply) or "save" (after apply).'
     required: true
   path:
-    description: State directory to cache.
-    required: false
-    default: .state
+    description: >-
+      State path to cache. No default: pass the flavor's actual backend
+      location (e.g. stacks ".state", folders "<leaf>/terraform.tfstate",
+      workspaces "terraform.tfstate.d") so state is actually persisted.
+    required: true
 runs:
   using: composite
   steps:
+    - name: Validate mode
+      shell: bash
+      run: |
+        case "${{ inputs.mode }}" in
+          restore|save) ;;
+          *) echo "::error::shipmate/actions/state: 'mode' must be 'restore' or 'save', got '${{ inputs.mode }}'"; exit 1 ;;
+        esac
     - name: Restore state
       if: ${{ inputs.mode == 'restore' }}
       uses: actions/cache/restore@v4
       with:
         path: ${{ inputs.path }}
-        key: state-${{ inputs.stack-slug }}-${{ inputs.env }}-${{ github.run_id }}
+        # '/'-delimited so one env name cannot prefix-match another
+        # (state/app/dev/ never matches state/app/dev-eu/...). run_attempt
+        # makes each GitHub "re-run" a fresh, writable save key.
+        key: state/${{ inputs.stack-slug }}/${{ inputs.env }}/${{ github.run_id }}-${{ github.run_attempt }}
         restore-keys: |
-          state-${{ inputs.stack-slug }}-${{ inputs.env }}-
+          state/${{ inputs.stack-slug }}/${{ inputs.env }}/
     - name: Save state
       if: ${{ inputs.mode == 'save' }}
       uses: actions/cache/save@v4
       with:
         path: ${{ inputs.path }}
-        key: state-${{ inputs.stack-slug }}-${{ inputs.env }}-${{ github.run_id }}
+        key: state/${{ inputs.stack-slug }}/${{ inputs.env }}/${{ github.run_id }}-${{ github.run_attempt }}
