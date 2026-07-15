@@ -52,7 +52,7 @@ runs:
           exit 1
         fi
 
-    - uses: shipmate-iac/shipmate/actions/state@__DEV_SHA__
+    - uses: shipmate-iac/shipmate/actions/state@7ce13c7b84def695f3696f6e5812986aa8fecfa8
       with:
         stack-slug: ${{ steps.ids.outputs.slug }}
         env: ${{ inputs.env }}
@@ -68,7 +68,7 @@ runs:
       # was generated -> non-zero exit -> apply check stays pending (fail-safe).
       run: terramate script run --no-recursive -C "$STACK" apply
 
-    - uses: shipmate-iac/shipmate/actions/state@__DEV_SHA__
+    - uses: shipmate-iac/shipmate/actions/state@7ce13c7b84def695f3696f6e5812986aa8fecfa8
       with:
         stack-slug: ${{ steps.ids.outputs.slug }}
         env: ${{ inputs.env }}

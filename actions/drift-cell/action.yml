@@ -17,7 +17,7 @@ runs:
         STACK: ${{ inputs.stack }}
       run: echo "slug=$(printf '%s' "$STACK" | tr / -)" >> "$GITHUB_OUTPUT"
 
-    - uses: shipmate-iac/shipmate/actions/state@__DEV_SHA__
+    - uses: shipmate-iac/shipmate/actions/state@7ce13c7b84def695f3696f6e5812986aa8fecfa8
       with:
         stack-slug: ${{ steps.ids.outputs.slug }}
         env: ${{ inputs.env }}
