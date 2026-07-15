@@ -24,14 +24,14 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        planfile="${{ inputs.stack }}/stack.otplan"
         tofu -chdir="${{ inputs.stack }}" show -no-color stack.otplan > plan.txt
         tofu -chdir="${{ inputs.stack }}" show -json stack.otplan > plan.json
-        python3 - "$planfile" <<'PY'
-        import json, os, sys
+        python3 - <<'PY'
+        import json, os
         data = json.load(open("plan.json"))
         rcs = data.get("resource_changes", []) or []
-        changed = [r for r in rcs if any(a != "no-op" for a in r["change"]["actions"])]
+        # "no-op" = unchanged; "read" = deferred data-source read (not a real change).
+        changed = [r for r in rcs if any(a not in ("no-op", "read") for a in r["change"]["actions"])]
         add = sum(1 for r in changed if "create" in r["change"]["actions"])
         destroy = sum(1 for r in changed if "delete" in r["change"]["actions"])
         change = sum(1 for r in changed if set(r["change"]["actions"]) == {"update"})
