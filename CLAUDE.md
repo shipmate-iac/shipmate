@@ -42,7 +42,9 @@ Sample repos use a **local backend** (`path = ".state/${var.env}/${var.region}/t
 
 ```bash
 # Enumerate stacks for an env (tag-driven; verify the tag model per flavor)
-terramate list --tags env:dev-eu
+# On-disk tags use a slash — the conceptual "env:dev-eu" is stored as "env/dev-eu"
+# (Terramate forbids ':' in tags and treats ':' in --tags as an AND operator).
+terramate list --tags env/dev-eu
 
 # Reproduce the DAG (stacks flavor: 5 levels dns→platform→{auth,workers}→app→{tenant-a,tenant-b})
 terramate experimental run-graph
