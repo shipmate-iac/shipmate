@@ -1,0 +1,79 @@
+name: shipmate summary
+description: Upsert the sticky preview comment and create/refresh the shipmate / checkmate gate check.
+inputs:
+  pr-number:    { description: Pull request number., required: true }
+  head-sha:     { description: PR head commit SHA., required: true }
+  cells-dir:    { description: Directory holding downloaded cell-summary-*/cell.json., required: false, default: cells }
+  github-token: { description: GITHUB_TOKEN with checks:write + pull-requests:write., required: true }
+runs:
+  using: composite
+  steps:
+    - name: Build comment + gate state
+      id: build
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'PY'
+        import glob, json, os
+        cells = [json.load(open(p)) for p in glob.glob(os.environ["CELLS"] + "/**/cell.json", recursive=True)]
+        cells.sort(key=lambda c: (c["environment"], c["stack"]))
+        run_url = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+        lines = ["<!-- shipmate:summary -->",
+                 "### shipmate preview",
+                 "", "| stack | env | + | ~ | - | status |",
+                 "|---|---|--:|--:|--:|---|"]
+        pending = False
+        for c in cells:
+            st = "apply pending" if c["changed"] else "no changes"
+            if c["changed"]:
+                pending = True
+            lines.append(f"| {c['stack']} | {c['environment']} | {c['add']} | {c['change']} | {c['destroy']} | {st} |")
+        if not cells:
+            lines.append("| _(no stacks changed)_ |  |  |  |  |  |")
+        lines += ["", f"[Plans, logs & artifacts]({run_url}) — plan text is in each `plan / <env> / <stack>` job summary."]
+        open("comment.md", "w").write("\n".join(lines))
+        with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+            fh.write(f"pending={'true' if pending else 'false'}\n")
+        PY
+      env:
+        CELLS: ${{ inputs.cells-dir }}
+
+    - name: Upsert sticky comment
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        set -euo pipefail
+        marker='<!-- shipmate:summary -->'
+        id=$(gh api "repos/$GITHUB_REPOSITORY/issues/${{ inputs.pr-number }}/comments" --paginate \
+               --jq "map(select(.body | contains(\"$marker\"))) | .[0].id // empty")
+        if [ -n "$id" ]; then
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@comment.md >/dev/null
+        else
+          gh api "repos/$GITHUB_REPOSITORY/issues/${{ inputs.pr-number }}/comments" -F body=@comment.md >/dev/null
+        fi
+
+    - name: Create/refresh checkmate gate
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        set -euo pipefail
+        # gh api has no -f bracket-nesting; build the JSON body with python (same as plan-cell).
+        if [ "${{ steps.build.outputs.pending }}" = "true" ]; then
+          status="queued"; conclusion=""; title="apply pending"
+          summary="One or more stacks are waiting to be applied. Merge is blocked until applies complete."
+        else
+          status="completed"; conclusion="success"; title="nothing to apply"
+          summary="No pending applies for this PR."
+        fi
+        python3 - "${{ inputs.head-sha }}" "$status" "$conclusion" "$title" "$summary" > gate.json <<'PY'
+        import json, sys
+        head, status, conclusion, title, summary = sys.argv[1:6]
+        body = {"name": "shipmate / checkmate", "head_sha": head, "status": status,
+                "output": {"title": title, "summary": summary}}
+        if conclusion:
+            body["conclusion"] = conclusion
+        print(json.dumps(body))
+        PY
+        gh api "repos/$GITHUB_REPOSITORY/check-runs" --input gate.json >/dev/null
