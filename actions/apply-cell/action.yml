@@ -108,7 +108,7 @@ runs:
         while read -r id; do
           [ -z "$id" ] && continue
           ok=""
-          for attempt in 1 2 3 4 5; do
+          for _ in 1 2 3 4 5; do
             if gh api -X PATCH "repos/$GITHUB_REPOSITORY/check-runs/$id" --input body.json >/dev/null; then ok=1; break; fi
             sleep 3
           done

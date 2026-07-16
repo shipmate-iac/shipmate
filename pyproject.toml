@@ -14,6 +14,8 @@ dev = [
     "ruff>=0.14",
     "ty>=0.0.1a1",  # Astral type checker — still beta; kept non-blocking in CI
     "pytest>=8",
+    "pyyaml>=6",         # parse composite action.yml in the shellcheck test
+    "shellcheck-py>=0.10",  # pip-packaged shellcheck binary (cross-platform)
 ]
 
 [tool.ruff]
@@ -40,5 +42,6 @@ select = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Tests: assert is the point; subprocess/tmp-path patterns don't apply.
-"scripts/tests/*" = ["S101"]
+# Tests: assert is the point (S101); they invoke trusted dev tools by name
+# (shellcheck) via subprocess (S603/S607).
+"scripts/tests/*" = ["S101", "S603", "S607"]

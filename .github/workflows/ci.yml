@@ -15,6 +15,14 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
 
+      # Lint the workflow files (and shellcheck their run: blocks). actionlint
+      # only covers .github/workflows/, not composite actions/*/action.yml.
+      # Download script pinned at the release tag; it verifies the binary checksum.
+      - name: actionlint
+        run: |
+          bash <(curl -sSf https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12
+          ./actionlint -color
+
       - name: Ruff lint (incl. flake8-bandit S rules)
         run: uv run ruff check .
 
