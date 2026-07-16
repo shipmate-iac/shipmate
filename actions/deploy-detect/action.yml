@@ -16,8 +16,8 @@ outputs:
   wave5: { description: JSON cell array for wave 5., value: "${{ steps.d.outputs.wave5 }}" }
   wave6: { description: JSON cell array for wave 6., value: "${{ steps.d.outputs.wave6 }}" }
   wave7: { description: JSON cell array for wave 7., value: "${{ steps.d.outputs.wave7 }}" }
-  head-sha: { description: PR head SHA for the merged commit., value: "${{ steps.d.outputs.head-sha }}" }
-  preview-run-id: { description: Preview workflow run id holding the reviewed plan artifacts., value: "${{ steps.d.outputs.preview-run-id }}" }
+  head_sha: { description: PR head SHA for the merged commit., value: "${{ steps.d.outputs.head_sha }}" }
+  preview_run_id: { description: Preview workflow run id holding the reviewed plan artifacts., value: "${{ steps.d.outputs.preview_run_id }}" }
   empty: { description: "'true' when no wave has any cell.", value: "${{ steps.d.outputs.empty }}" }
 runs:
   using: composite
