@@ -27,7 +27,11 @@ runs:
       shell: bash
       env:
         STACK: ${{ inputs.stack }}
-      run: terramate script run --no-recursive -C "$STACK" plan
+      run: |
+        set -euo pipefail
+        echo "::group::terramate plan: $STACK"
+        terramate script run --no-recursive -C "$STACK" plan
+        echo "::endgroup::"
 
     - name: Stack slug
       id: ids

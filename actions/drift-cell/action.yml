@@ -46,7 +46,9 @@ runs:
         STACK: ${{ inputs.stack }}
       run: |
         set -euo pipefail
+        echo "::group::terramate plan: $STACK"
         terramate script run --no-recursive -C "$STACK" plan
+        echo "::endgroup::"
         tofu -chdir="$STACK" show -json stack.otplan > plan.json
         python3 "$GITHUB_ACTION_PATH/../../scripts/plan-classify" plan.json
 
