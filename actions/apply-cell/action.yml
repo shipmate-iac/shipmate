@@ -118,12 +118,14 @@ runs:
         python3 - > ids.txt <<'PY'
         import json, os
         name = f"apply / {os.environ['ENV']} / {os.environ['STACK']}"
-        ids = [c["id"] for c in map(json.loads, open("checks.jsonl")) if c.get("name") == name]
+        with open("checks.jsonl") as fh:
+            ids = [c["id"] for c in map(json.loads, fh) if c.get("name") == name]
         if not ids:
             raise SystemExit(f"::error::no apply check named '{name}' on head SHA; nothing to complete.")
-        json.dump({"status": "completed", "conclusion": "success",
-                   "output": {"title": "applied", "summary": "Applied the reviewed plan for this stack x environment."}},
-                  open("body.json", "w"))
+        with open("body.json", "w") as fh:
+            json.dump({"status": "completed", "conclusion": "success",
+                       "output": {"title": "applied", "summary": "Applied the reviewed plan for this stack x environment."}},
+                      fh)
         print("\n".join(str(i) for i in ids))
         PY
         # State is already saved; retry each completion so a transient API blip

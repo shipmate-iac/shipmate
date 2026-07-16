@@ -93,14 +93,15 @@ runs:
       run: |
         python3 - <<'PY'
         import json, os
-        json.dump({
-            "stack": os.environ["STACK_NAME"],
-            "environment": os.environ["ENV"],
-            "add": int(os.environ["ADD"]),
-            "change": int(os.environ["CHANGE"]),
-            "destroy": int(os.environ["DESTROY"]),
-            "changed": os.environ["CHANGED"] == "true",
-        }, open("cell.json", "w"))
+        with open("cell.json", "w") as fh:
+            json.dump({
+                "stack": os.environ["STACK_NAME"],
+                "environment": os.environ["ENV"],
+                "add": int(os.environ["ADD"]),
+                "change": int(os.environ["CHANGE"]),
+                "destroy": int(os.environ["DESTROY"]),
+                "changed": os.environ["CHANGED"] == "true",
+            }, fh)
         PY
 
     - name: Upload cell summary

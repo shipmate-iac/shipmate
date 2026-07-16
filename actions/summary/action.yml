@@ -32,7 +32,10 @@ runs:
         set -euo pipefail
         python3 - <<'PY'
         import glob, json, os
-        cells = [json.load(open(p)) for p in glob.glob(os.environ["CELLS"] + "/**/cell.json", recursive=True)]
+        cells = []
+        for p in glob.glob(os.environ["CELLS"] + "/**/cell.json", recursive=True):
+            with open(p) as fh:
+                cells.append(json.load(fh))
         cells.sort(key=lambda c: (c["environment"], c["stack"]))
         run_url = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
         lines = ["<!-- shipmate:summary -->",
@@ -48,7 +51,8 @@ runs:
         if not cells:
             lines.append("| _(no stacks changed)_ |  |  |  |  |  |")
         lines += ["", f"[Plans, logs & artifacts]({run_url}) — plan text is in each `plan / <env> / <stack>` job summary."]
-        open("comment.md", "w").write("\n".join(lines))
+        with open("comment.md", "w") as fh:
+            fh.write("\n".join(lines))
         with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
             fh.write(f"pending={'true' if pending else 'false'}\n")
             fh.write(f"count={len(cells)}\n")
