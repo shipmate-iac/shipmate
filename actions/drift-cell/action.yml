@@ -47,7 +47,6 @@ runs:
         DESTROY: ${{ steps.plan.outputs.destroy }}
       run: |
         set -euo pipefail
-        gh label create drift --color FBCA04 --description "shipmate drift" --force >/dev/null 2>&1 || true
         title="drift: $ENV / $STACK_NAME"
         existing=$(gh issue list --label drift --state open --limit 200 --json number,title \
           | TITLE="$title" python3 -c "import json,os,sys;print(next((str(i['number']) for i in json.load(sys.stdin) if i['title']==os.environ['TITLE']),''))")
@@ -56,6 +55,7 @@ runs:
           if [ -n "$existing" ]; then
             gh issue edit "$existing" --body "$body" >/dev/null
           else
+            gh label create drift --color FBCA04 --description "shipmate drift" --force >/dev/null 2>&1 || true
             gh issue create --title "$title" --label drift --body "$body" >/dev/null
           fi
         elif [ -n "$existing" ]; then

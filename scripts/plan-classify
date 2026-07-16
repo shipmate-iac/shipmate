@@ -30,14 +30,23 @@ def fingerprint(environ):
     so without it two envs of a workspaces stack hash identically. It is included
     only when non-empty, so stacks/folders fingerprints match the PRD-1 algo.
     """
-    payload = {k: v for k, v in environ.items() if k.startswith("TF_VAR_")}
-    ws = environ.get("TF_WORKSPACE")
-    if ws:
-        payload["TF_WORKSPACE"] = ws
-    return hashlib.sha256(json.dumps(dict(sorted(payload.items())), sort_keys=True).encode()).hexdigest()
+    payload = {k: environ[k] for k in fingerprint_keys(environ)}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+
+
+def fingerprint_keys(environ):
+    """The env-var names that feed the fingerprint: TF_VAR_* plus TF_WORKSPACE
+    when set. Single source of truth for both the hash and its diagnostic."""
+    keys = [k for k in environ if k.startswith("TF_VAR_")]
+    if environ.get("TF_WORKSPACE"):
+        keys.append("TF_WORKSPACE")
+    return sorted(keys)
 
 
 def main(argv):
+    if "--keys" in argv:
+        print(" ".join(fingerprint_keys(os.environ)))
+        return
     open("fingerprint.txt", "w", encoding="utf-8").write(fingerprint(os.environ))
     if "--fingerprint-only" in argv:
         return

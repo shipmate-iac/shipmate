@@ -65,30 +65,37 @@ def assign_waves(levels_, cells):
     return waves
 
 
+def guard_max_waves(waves):
+    """Fail if a populated wave lands beyond the pre-declared wave0..wave7 jobs.
+    A deep FULL graph with only low-level cells in the work set is fine — empty
+    trailing levels do not count."""
+    over = [i for i, w in enumerate(waves) if w and i >= MAX_WAVES]
+    if over:
+        raise SystemExit(
+            f"::error::change spans {over[-1] + 1} dependency levels (> {MAX_WAVES}); split the PR."
+        )
+
+
+def write_waves(fh, waves):
+    """Emit wave0..wave{MAX_WAVES-1} (JSON arrays) + the `empty` flag to a
+    GITHUB_OUTPUT file handle. Shared by this script and deploy-detect."""
+    for i in range(MAX_WAVES):
+        fh.write(f"wave{i}={json.dumps(waves[i] if i < len(waves) else [])}\n")
+    fh.write(f"empty={'false' if any(waves) else 'true'}\n")
+
+
 def main(argv):
     deps = parse_dot(sys.stdin.read())
     try:
         lv = levels(deps)
     except CycleError as e:
         raise SystemExit(f"::error::dependency cycle in run-graph: {e}")
-    cells = json.loads(os.environ.get("SHIPMATE_WORKSET", "[]"))
-    waves = assign_waves(lv, cells)
-    # Trim trailing empty waves but keep interior ones (index == topological level).
-    used = [w for w in waves if w]
-    if len(waves) > MAX_WAVES:
-        # Only fail if a *populated* wave exceeds the pre-declared job count.
-        max_used = max((i for i, w in enumerate(waves) if w), default=-1)
-        if max_used >= MAX_WAVES:
-            raise SystemExit(
-                f"::error::change spans {max_used + 1} dependency levels (> {MAX_WAVES}); split the PR."
-            )
+    waves = assign_waves(lv, json.loads(os.environ.get("SHIPMATE_WORKSET", "[]")))
+    guard_max_waves(waves)
     if "--reverse" in argv:
         waves = list(reversed(waves))
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
-        for i in range(MAX_WAVES):
-            wave = waves[i] if i < len(waves) else []
-            fh.write(f"wave{i}={json.dumps(wave)}\n")
-        fh.write(f"empty={'true' if not used else 'false'}\n")
+        write_waves(fh, waves)
 
 
 if __name__ == "__main__":
