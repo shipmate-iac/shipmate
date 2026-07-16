@@ -33,7 +33,7 @@ The three `repo-example-{stacks,folders,workspaces}` sample repos (null resource
 - **Post-merge detect (exact-plan):** `deploy.yml`'s `deploy-detect` maps the merge commit → its PR head SHA and orders the reviewed `.otplan` artifacts whose `apply` check is still **pending** into waves; completed checks (pre-merge-applied, or no-op) are skipped → idempotent no-op. The pending apply checks ARE the work queue — **no "last deployed ref" diff** (Terramate has no deployment memory; the marker was only ever a substitute for this queue). A GHA-superseded deploy leaves its stacks pending+visible, recovered by re-running that deploy.
 - **Merge→PR mapping:** complete apply checks on the merged PR's head SHA via `GET /repos/{owner}/{repo}/commits/{sha}/pulls` (squash merges drop the PR head SHA from main).
 - **Serialization:** per-env `concurrency` group shared between `deploy.yml` and the manual apply path; exactly one apply runs against a given stack at any time.
-- No org-specific values anywhere — everything via inputs/vars (the authz team is a GitHub team-slug **input**). Keep the "not affiliated with Terramate GmbH" note. Never vendor or modify Terramate source (MPL-2.0 imposes nothing on tooling that only invokes the binary).
+- No org-specific values anywhere — everything via inputs/vars (the authz team is a GitHub team-slug **input**). Keep the trademarks / non-affiliation note (Terramate, Terraform, OpenTofu). Never vendor or modify Terramate source (MPL-2.0 imposes nothing on tooling that only invokes the binary).
 
 ## Commands (development + acceptance, run in a sample repo)
 
