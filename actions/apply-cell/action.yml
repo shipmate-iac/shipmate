@@ -88,8 +88,10 @@ runs:
         gh api --paginate --jq '.check_runs[]' "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/check-runs?per_page=100" > checks.jsonl
         # Author-controlled ENV/STACK pass via env; JSON handled in python. The
         # check name uses the stack PATH ($STACK) — the value deploy-detect
-        # reconstructs — so plan/complete/detect always agree.
-        id=$(python3 - <<'PY'
+        # reconstructs — so plan/complete/detect always agree. Emit EVERY id with
+        # this name: a re-run preview can create duplicate apply checks, and
+        # leaving any one pending would block the merge/deploy forever.
+        python3 - > ids.txt <<'PY'
         import json, os
         name = f"apply / {os.environ['ENV']} / {os.environ['STACK']}"
         ids = [c["id"] for c in map(json.loads, open("checks.jsonl")) if c.get("name") == name]
@@ -98,7 +100,17 @@ runs:
         json.dump({"status": "completed", "conclusion": "success",
                    "output": {"title": "applied", "summary": "Applied the reviewed plan for this stack x environment."}},
                   open("body.json", "w"))
-        print(ids[0])
+        print("\n".join(str(i) for i in ids))
         PY
-        )
-        gh api -X PATCH "repos/$GITHUB_REPOSITORY/check-runs/$id" --input body.json >/dev/null
+        # State is already saved; retry each completion so a transient API blip
+        # doesn't strand a check pending — re-running can't recover it (the saved
+        # plan is now stale against the advanced state).
+        while read -r id; do
+          [ -z "$id" ] && continue
+          ok=""
+          for attempt in 1 2 3 4 5; do
+            if gh api -X PATCH "repos/$GITHUB_REPOSITORY/check-runs/$id" --input body.json >/dev/null; then ok=1; break; fi
+            sleep 3
+          done
+          [ -n "$ok" ] || { echo "::error::failed to complete apply check $id after retries"; exit 1; }
+        done < ids.txt

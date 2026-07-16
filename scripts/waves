@@ -59,6 +59,13 @@ def assign_waves(levels_, cells):
     """Bucket cells by the full-graph level of their stack (index-preserving)."""
     level_of = {stack: i for i, lv in enumerate(levels_) for stack in lv}
     if not levels_:
+        if cells:
+            # Fail loud: an empty graph with pending cells means run-graph failed
+            # or returned nothing — never silently skip applies that are due.
+            raise SystemExit(
+                "::error::run-graph produced no levels but the work set is non-empty; "
+                "refusing to silently drop pending applies (empty or failed run-graph?)."
+            )
         return []
     waves = [[] for _ in range(len(levels_))]
     for c in cells:
@@ -97,9 +104,11 @@ def main(argv):
     except CycleError as e:
         raise SystemExit(f"::error::dependency cycle in run-graph: {e}") from e
     waves = assign_waves(lv, json.loads(os.environ.get("SHIPMATE_WORKSET", "[]")))
-    guard_max_waves(waves)
     if "--reverse" in argv:
         waves = list(reversed(waves))
+    # Guard AFTER reversing: --reverse can move a populated low level past index 7,
+    # where write_waves would silently drop it.
+    guard_max_waves(waves)
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
         write_waves(fh, waves)
 

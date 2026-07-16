@@ -28,7 +28,7 @@ runs:
         esac
     - name: Restore state
       if: ${{ inputs.mode == 'restore' }}
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
       with:
         path: ${{ inputs.path }}
         # '/'-delimited so one env name cannot prefix-match another
@@ -39,7 +39,7 @@ runs:
           state/${{ inputs.stack-slug }}/${{ inputs.env }}/
     - name: Save state
       if: ${{ inputs.mode == 'save' }}
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
       with:
         path: ${{ inputs.path }}
         key: state/${{ inputs.stack-slug }}/${{ inputs.env }}/${{ github.run_id }}-${{ github.run_attempt }}

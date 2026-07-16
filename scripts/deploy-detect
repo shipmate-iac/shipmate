@@ -10,6 +10,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import time
 from graphlib import CycleError
 from importlib.machinery import SourceFileLoader
 
@@ -38,12 +39,30 @@ def _gh_json(path):
     return json.loads(bm._run(["gh", "api", path]))
 
 
+def _merged_head(repo, merge_sha, _attempts=3, _sleep=2):
+    """Map a merge commit -> the head SHA of the PR it merged.
+
+    Reviewed .otplan artifacts and apply checks live on the PR head, not on main.
+    Two edge cases handled: (1) `commits/{sha}/pulls` can transiently return []
+    for a few seconds after the push (association indexing lag) — retry before
+    falling back; (2) a commit may be associated with more than one PR — pick the
+    one this commit actually merged (merge_commit_sha == merge_sha), not pulls[0].
+    A genuine non-PR push to main yields no pulls -> head = merge_sha.
+    """
+    for attempt in range(_attempts):
+        pulls = _gh_json(f"repos/{repo}/commits/{merge_sha}/pulls")
+        if pulls:
+            merged = next((p for p in pulls if p.get("merge_commit_sha") == merge_sha), pulls[0])
+            return merged["head"]["sha"]
+        if attempt < _attempts - 1:
+            time.sleep(_sleep)
+    return merge_sha
+
+
 def main():
     repo = os.environ["GITHUB_REPOSITORY"]
     merge_sha = os.environ["GITHUB_SHA"]
-    pulls = _gh_json(f"repos/{repo}/commits/{merge_sha}/pulls")
-    # squash merges drop the PR head SHA from main -> map via the commit's PRs.
-    head = pulls[0]["head"]["sha"] if pulls else merge_sha
+    head = _merged_head(repo, merge_sha)
     cells = bm.compute_cells(all_stacks=False, base=os.environ.get("SHIPMATE_BASE_SHA", ""))
     # Check-runs are paginated (a 256-cell PR yields >100); --paginate --jq streams
     # them as JSONL so no page — hence no completed apply — is silently dropped.
