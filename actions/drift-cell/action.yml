@@ -1,23 +1,38 @@
 name: shipmate drift-cell
 description: Plan one stack x env; open/update a drift Issue on changes, auto-close it when clean.
 inputs:
-  stack:         { description: 'Stack path, e.g. stacks/app.', required: true }
-  stack-name:    { description: 'Stack display name, e.g. app.', required: true }
-  env:           { description: 'Environment name, e.g. dev-eu.', required: true }
-  state-path:    { description: 'Flavor state path, e.g. stacks/app/.state.', required: true }
-  github-token:  { description: 'GITHUB_TOKEN with issues:write.', required: true }
-  slack-webhook: { description: 'Optional Slack webhook URL; drift is posted when set.', required: false, default: "" }
+  stack:
+    description: Stack path, e.g. stacks/app.
+    required: true
+  stack-name:
+    description: Stack display name for the issue, e.g. app.
+    required: true
+  env:
+    description: Environment name, e.g. dev-eu.
+    required: true
+  state-path:
+    description: Flavor state path, e.g. stacks/app/.state.
+    required: true
+  github-token:
+    description: GITHUB_TOKEN with issues:write.
+    required: true
+  slack-webhook:
+    description: Optional Slack webhook URL; drift is posted when set.
+    required: false
+    default: ""
 runs:
   using: composite
   steps:
     - name: Stack slug
       id: ids
       shell: bash
+      # Author-controlled $STACK via env (never interpolated) — injection-safe.
       env:
         STACK: ${{ inputs.stack }}
       run: echo "slug=$(printf '%s' "$STACK" | tr / -)" >> "$GITHUB_OUTPUT"
 
-    - uses: shipmate-iac/shipmate/actions/state@7ce13c7b84def695f3696f6e5812986aa8fecfa8
+    - name: Restore state
+      uses: shipmate-iac/shipmate/actions/state@7ce13c7b84def695f3696f6e5812986aa8fecfa8
       with:
         stack-slug: ${{ steps.ids.outputs.slug }}
         env: ${{ inputs.env }}

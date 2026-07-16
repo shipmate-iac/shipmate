@@ -1,19 +1,34 @@
 name: shipmate apply-cell
 description: Apply one stack x env from its reviewed .otplan artifact; complete the apply check. Never re-plans.
 inputs:
-  stack:          { description: 'Stack path, e.g. stacks/app.', required: true }
-  stack-name:     { description: 'Stack display name for the check, e.g. app.', required: true }
-  env:            { description: 'Environment name, e.g. dev-eu.', required: true }
-  head-sha:       { description: 'PR head SHA carrying the pending apply check.', required: true }
-  preview-run-id: { description: 'Preview run id holding the reviewed plan artifact.', required: true }
-  state-path:     { description: 'Flavor state path, e.g. stacks/app/.state.', required: true }
-  github-token:   { description: 'GITHUB_TOKEN with checks:write and actions:read.', required: true }
+  stack:
+    description: Stack path, e.g. stacks/app.
+    required: true
+  stack-name:
+    description: Stack display name for the check, e.g. app.
+    required: true
+  env:
+    description: Environment name, e.g. dev-eu.
+    required: true
+  head-sha:
+    description: PR head SHA carrying the pending apply check.
+    required: true
+  preview-run-id:
+    description: Preview run id holding the reviewed plan artifact.
+    required: true
+  state-path:
+    description: Flavor state path, e.g. stacks/app/.state.
+    required: true
+  github-token:
+    description: GITHUB_TOKEN with checks:write and actions:read.
+    required: true
 runs:
   using: composite
   steps:
-    - name: Stack slug (artifact names forbid '/')
+    - name: Stack slug
       id: ids
       shell: bash
+      # Author-controlled $STACK via env (never interpolated) — injection-safe.
       env:
         STACK: ${{ inputs.stack }}
       run: echo "slug=$(printf '%s' "$STACK" | tr / -)" >> "$GITHUB_OUTPUT"
@@ -52,7 +67,8 @@ runs:
           exit 1
         fi
 
-    - uses: shipmate-iac/shipmate/actions/state@7ce13c7b84def695f3696f6e5812986aa8fecfa8
+    - name: Restore state
+      uses: shipmate-iac/shipmate/actions/state@7ce13c7b84def695f3696f6e5812986aa8fecfa8
       with:
         stack-slug: ${{ steps.ids.outputs.slug }}
         env: ${{ inputs.env }}
@@ -68,7 +84,8 @@ runs:
       # was generated -> non-zero exit -> apply check stays pending (fail-safe).
       run: terramate script run --no-recursive -C "$STACK" apply
 
-    - uses: shipmate-iac/shipmate/actions/state@7ce13c7b84def695f3696f6e5812986aa8fecfa8
+    - name: Save state
+      uses: shipmate-iac/shipmate/actions/state@7ce13c7b84def695f3696f6e5812986aa8fecfa8
       with:
         stack-slug: ${{ steps.ids.outputs.slug }}
         env: ${{ inputs.env }}
