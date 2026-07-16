@@ -9,8 +9,6 @@ import importlib.util
 import json
 import os
 import pathlib
-import subprocess
-import sys
 from importlib.machinery import SourceFileLoader
 from graphlib import CycleError
 
@@ -34,25 +32,10 @@ def filter_pending(cells, completed_names):
             if f"apply / {c['environment']} / {c['stack']}" not in completed_names]
 
 
+# All subprocess calls go through bm._run (surfaces the tool's stderr, then
+# raises ::error:: on nonzero) so error handling has a single definition.
 def _gh_json(path):
-    p = subprocess.run(["gh", "api", path], capture_output=True, text=True)
-    if p.returncode != 0:
-        sys.stderr.write(p.stderr)
-        raise SystemExit(f"::error::gh api failed: {path}")
-    return json.loads(p.stdout)
-
-
-def _gh_check_runs(repo, sha):
-    """All check-runs for a commit, paginated — a 256-cell PR yields >100 checks,
-    so a single per_page=100 page would silently drop completed applies."""
-    p = subprocess.run(
-        ["gh", "api", "--paginate", "--jq", ".check_runs[]",
-         f"repos/{repo}/commits/{sha}/check-runs?per_page=100"],
-        capture_output=True, text=True)
-    if p.returncode != 0:
-        sys.stderr.write(p.stderr)
-        raise SystemExit("::error::gh api check-runs failed")
-    return [json.loads(line) for line in p.stdout.splitlines() if line.strip()]
+    return json.loads(bm._run(["gh", "api", path]))
 
 
 def main():
@@ -62,16 +45,16 @@ def main():
     # squash merges drop the PR head SHA from main -> map via the commit's PRs.
     head = pulls[0]["head"]["sha"] if pulls else merge_sha
     cells = bm.compute_cells(all_stacks=False, base=os.environ.get("SHIPMATE_BASE_SHA", ""))
-    checks = _gh_check_runs(repo, head)
+    # Check-runs are paginated (a 256-cell PR yields >100); --paginate --jq streams
+    # them as JSONL so no page — hence no completed apply — is silently dropped.
+    checks_jsonl = bm._run(["gh", "api", "--paginate", "--jq", ".check_runs[]",
+                            f"repos/{repo}/commits/{head}/check-runs?per_page=100"])
+    checks = [json.loads(line) for line in checks_jsonl.splitlines() if line.strip()]
     completed = {c["name"] for c in checks
                  if c["name"].startswith("apply / ") and c["status"] == "completed"}
     pending = filter_pending(cells, completed)
-    graph = subprocess.run(["terramate", "experimental", "run-graph", "--label", "stack.dir"],
-                           capture_output=True, text=True)
-    if graph.returncode != 0:
-        sys.stderr.write(graph.stderr)
-        raise SystemExit("::error::run-graph failed")
-    waves = wv.assign_waves(wv.levels(wv.parse_dot(graph.stdout)), pending)
+    graph = bm._run(["terramate", "experimental", "run-graph", "--label", "stack.dir"])
+    waves = wv.assign_waves(wv.levels(wv.parse_dot(graph)), pending)
     wv.guard_max_waves(waves)
     runs = _gh_json(
         f"repos/{repo}/actions/workflows/preview.yml/runs?head_sha={head}&status=success"

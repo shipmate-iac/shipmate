@@ -22,11 +22,8 @@ def build_matrix(envs, stacks_by_env, tags_by_stack):
     cells = []
     for env in envs:
         for stack in stacks_by_env.get(env, []):
-            workload = ""
-            for tag in tags_by_stack.get(stack, []):
-                if tag.startswith("workload/"):
-                    workload = tag[len("workload/"):]
-                    break
+            workload = next((t[len("workload/"):] for t in tags_by_stack.get(stack, [])
+                             if t.startswith("workload/")), "")
             cells.append({"stack": stack, "environment": env, "workload": workload})
     cells.sort(key=lambda c: (c["environment"], c["stack"]))
     if len(cells) > MATRIX_LIMIT:
