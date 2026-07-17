@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""Parse a PR comment against the strict comment-ops grammar.
+
+Grammar: `mate <verb> <env> [tag-filter]`. Injection-safe: the whole command
+line must match one anchored regex; nothing is ever passed to a shell. `apply`
+is active from day one; `plan`/`destroy` are reserved (recognized, rejected
+with a "reserved" message so the grammar is stable as verbs are added).
+"""
+
+import os
+import re
+
+# `mate` as a whole word, then verb, env, optional tag-filter. env is lower
+# kebab (matches GitHub env naming); tag-filter allows the on-disk tag charset.
+_CMD = re.compile(
+    r"^mate (?P<verb>[a-z]+) (?P<env>[a-z0-9][a-z0-9-]*)"
+    r"(?: (?P<tag>[A-Za-z0-9][A-Za-z0-9/_:.-]*))?$"
+)
+_MATE_LINE = re.compile(r"^mate\b")
+VERBS_ACTIVE = {"apply"}
+VERBS_RESERVED = {"plan", "destroy"}
+
+
+def parse(body):
+    """Return the parse result dict (see plan Interfaces). Never raises."""
+    result = {
+        "is_command": False,
+        "valid": False,
+        "verb": None,
+        "env": None,
+        "tag_filter": None,
+        "error": None,
+    }
+    line = next(
+        (ln.strip() for ln in body.splitlines() if _MATE_LINE.match(ln.strip())),
+        None,
+    )
+    if line is None:
+        return result
+    result["is_command"] = True
+    m = _CMD.match(line)
+    if not m:
+        result["error"] = "malformed: expected `mate <verb> <env> [tag-filter]`"
+        return result
+    verb, env, tag = m.group("verb"), m.group("env"), m.group("tag")
+    result.update(verb=verb, env=env, tag_filter=tag)
+    if verb in VERBS_RESERVED:
+        result["error"] = f"verb `{verb}` is reserved and not yet implemented"
+        return result
+    if verb not in VERBS_ACTIVE:
+        result["error"] = f"unknown verb `{verb}` (supported: {', '.join(sorted(VERBS_ACTIVE))})"
+        return result
+    result["valid"] = True
+    return result
+
+
+def main():
+    r = parse(os.environ.get("COMMENT_BODY", ""))
+    with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+        fh.write(f"is_command={'true' if r['is_command'] else 'false'}\n")
+        fh.write(f"valid={'true' if r['valid'] else 'false'}\n")
+        fh.write(f"verb={r['verb'] or ''}\n")
+        fh.write(f"env={r['env'] or ''}\n")
+        fh.write(f"tag_filter={r['tag_filter'] or ''}\n")
+        fh.write(f"error={r['error'] or ''}\n")
+
+
+if __name__ == "__main__":
+    main()

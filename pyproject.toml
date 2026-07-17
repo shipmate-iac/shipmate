@@ -26,6 +26,7 @@ line-length = 100
 # list them explicitly.
 extend-include = [
     "scripts/build-matrix",
+    "scripts/comment-parse",
     "scripts/deploy-detect",
     "scripts/plan-classify",
     "scripts/waves",
