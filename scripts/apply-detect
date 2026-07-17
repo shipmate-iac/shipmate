@@ -49,11 +49,17 @@ def filter_pending(cells, completed_names):
     return [c for c in cells if f"apply / {c['environment']} / {c['stack']}" not in completed_names]
 
 
-def cross_env_block(cells, deps, pending_other_by_stack):
+def cross_env_block(cells, deps, pending_other_by_stack, env_stacks=None):
     """Return the name of a blocking check, or None. A requested cell is blocked
     if a transitive upstream stack is NOT in this env's work set but has a
-    pending apply check under a different env."""
-    workset_stacks = {c["stack"] for c in cells}
+    pending apply check under a different env.
+
+    `env_stacks` is the FULL env work set (all stacks in this env, not just the
+    still-pending `cells`) — on a retry after partial failure, an already-applied
+    same-env upstream is no longer in `cells` and must not be mistaken for an
+    out-of-env stack. Defaults to `cells`' own stacks for the existing 3-arg
+    callers/tests."""
+    env_stacks = env_stacks if env_stacks is not None else {c["stack"] for c in cells}
 
     def upstreams(stack, seen):
         for up in deps.get(stack, set()):
@@ -64,13 +70,9 @@ def cross_env_block(cells, deps, pending_other_by_stack):
 
     for c in cells:
         for up in upstreams(c["stack"], set()):
-            if up not in workset_stacks and up in pending_other_by_stack:
+            if up not in env_stacks and up in pending_other_by_stack:
                 return pending_other_by_stack[up]
     return None
-
-
-def _gh_json(path):
-    return json.loads(bm._run(["gh", "api", path]))
 
 
 def _artifact_names(repo, run_id):
@@ -125,7 +127,7 @@ def main():
             parts = name.split(" / ", 2)
             if len(parts) == 3 and parts[1] != env:
                 pending_other[parts[2]] = name
-    blocking = cross_env_block(pending, deps, pending_other)
+    blocking = cross_env_block(pending, deps, pending_other, env_stacks={c["stack"] for c in cells})
     if blocking:
         raise SystemExit(
             f"::error::cross-env prerequisite pending: an upstream dependency is "
@@ -149,7 +151,5 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except bm.MatrixTooLarge as e:
-        raise SystemExit(f"::error::{e}") from e
     except CycleError as e:
         raise SystemExit(f"::error::dependency cycle in run-graph: {e}") from e

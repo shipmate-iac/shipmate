@@ -70,3 +70,20 @@ def test_cross_env_no_block_when_no_other_env_pending():
     cells = [{"stack": "stacks/app", "environment": "dev-eu"}]
     deps = {"stacks/app": {"stacks/platform"}, "stacks/platform": set()}
     assert ad.cross_env_block(cells, deps, {}) is None
+
+
+def test_cross_env_no_block_when_upstream_applied_this_env_on_retry():
+    # platform (shared stack) was already applied in dev-eu on a prior partial
+    # run, so it's no longer in `pending` — but it IS still in this env's full
+    # work set, so it must not be mistaken for an out-of-env stack even though
+    # it also happens to be pending under dev-us.
+    app_cell = {"stack": "stacks/app", "environment": "dev-eu"}
+    deps = {"stacks/app": {"stacks/platform"}, "stacks/platform": set()}
+    pending_other = {"stacks/platform": "apply / dev-us / stacks/platform"}
+    block = ad.cross_env_block(
+        [app_cell],
+        deps,
+        pending_other,
+        env_stacks={"stacks/app", "stacks/platform"},
+    )
+    assert block is None
