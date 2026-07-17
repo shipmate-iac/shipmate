@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""apply.yml detect: a dispatched single-env apply's work set + waves.
+
+Unlike deploy-detect (merge-driven, all envs), the work set here is scoped to
+ONE environment and sourced from a specific preview run's plan artifacts:
+`plan-<slug>-<env>` artifacts present in SHIPMATE_PLAN_RUN_ID name exactly the
+stacks that were planned for this env. We map each present slug back to a stack
+PATH via the run-graph (path->slug is one-way; we slug each graph node forward
+and match), drop cells whose apply check already completed (idempotent no-op),
+guard against a cross-env dependency still pending elsewhere, then wave-order.
+"""
+
+import importlib.util
+import json
+import os
+import pathlib
+import re
+from graphlib import CycleError
+from importlib.machinery import SourceFileLoader
+
+_D = pathlib.Path(__file__).resolve().parent
+
+
+def _load(fname):
+    loader = SourceFileLoader(fname.replace("-", "_"), str(_D / fname))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+bm = _load("build-matrix")
+wv = _load("waves")
+
+
+def _slug(path):
+    return path.replace("/", "-")
+
+
+def workset_from_artifacts(artifact_names, env, graph_paths):
+    """Cells for `env` = graph stacks whose `plan-<slug>-<env>` artifact is
+    present in the plan run. Match by slugging each graph path forward."""
+    pat = re.compile(rf"^plan-(?P<slug>.+)-{re.escape(env)}$")
+    present = {m.group("slug") for n in artifact_names if (m := pat.match(n))}
+    return [{"stack": p, "environment": env} for p in graph_paths if _slug(p) in present]
+
+
+def filter_pending(cells, completed_names):
+    return [c for c in cells if f"apply / {c['environment']} / {c['stack']}" not in completed_names]
+
+
+def cross_env_block(cells, deps, pending_other_by_stack):
+    """Return the name of a blocking check, or None. A requested cell is blocked
+    if a transitive upstream stack is NOT in this env's work set but has a
+    pending apply check under a different env."""
+    workset_stacks = {c["stack"] for c in cells}
+
+    def upstreams(stack, seen):
+        for up in deps.get(stack, set()):
+            if up not in seen:
+                seen.add(up)
+                upstreams(up, seen)
+        return seen
+
+    for c in cells:
+        for up in upstreams(c["stack"], set()):
+            if up not in workset_stacks and up in pending_other_by_stack:
+                return pending_other_by_stack[up]
+    return None
+
+
+def _gh_json(path):
+    return json.loads(bm._run(["gh", "api", path]))
+
+
+def _artifact_names(repo, run_id):
+    data = bm._run(
+        [
+            "gh",
+            "api",
+            "--paginate",
+            "--jq",
+            ".artifacts[].name",
+            f"repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100",
+        ]
+    )
+    return [ln.strip() for ln in data.splitlines() if ln.strip()]
+
+
+def main():
+    repo = os.environ["GITHUB_REPOSITORY"]
+    env = os.environ["SHIPMATE_ENV"]
+    plan_run_id = os.environ["SHIPMATE_PLAN_RUN_ID"]
+    head = os.environ["SHIPMATE_HEAD_SHA"]
+
+    graph = bm._run(["terramate", "experimental", "run-graph", "--label", "stack.dir"])
+    deps = wv.parse_dot(graph)
+    graph_paths = list(deps.keys())
+
+    names = _artifact_names(repo, plan_run_id)
+    cells = workset_from_artifacts(names, env, graph_paths)
+
+    checks_jsonl = bm._run(
+        [
+            "gh",
+            "api",
+            "--paginate",
+            "--jq",
+            ".check_runs[]",
+            f"repos/{repo}/commits/{head}/check-runs?per_page=100",
+        ]
+    )
+    checks = [json.loads(line) for line in checks_jsonl.splitlines() if line.strip()]
+    completed = {
+        c["name"] for c in checks if c["name"].startswith("apply / ") and c["status"] == "completed"
+    }
+    pending = filter_pending(cells, completed)
+
+    # Cross-env prerequisite guard: pending apply checks under OTHER envs, keyed
+    # by stack. Name format: "apply / <env> / <stack>".
+    pending_other = {}
+    for c in checks:
+        name = c["name"]
+        if name.startswith("apply / ") and c["status"] != "completed":
+            parts = name.split(" / ", 2)
+            if len(parts) == 3 and parts[1] != env:
+                pending_other[parts[2]] = name
+    blocking = cross_env_block(pending, deps, pending_other)
+    if blocking:
+        raise SystemExit(
+            f"::error::cross-env prerequisite pending: an upstream dependency is "
+            f"still pending under another environment ('{blocking}'). Apply it "
+            f"first, then re-run `mate apply {env}`."
+        )
+
+    waves = wv.assign_waves(wv.levels(deps), pending)
+    wv.guard_max_waves(waves)
+    print(
+        f"::notice title=apply-detect::env={env} plan_run={plan_run_id} head={head} "
+        f"cells={len(cells)} completed={len(completed)} pending={len(pending)} "
+        f"waves={[len(w) for w in waves]} empty={not any(waves)}"
+    )
+    with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+        wv.write_waves(fh, waves)
+        fh.write(f"head_sha={head}\n")
+        fh.write(f"preview_run_id={plan_run_id}\n")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except bm.MatrixTooLarge as e:
+        raise SystemExit(f"::error::{e}") from e
+    except CycleError as e:
+        raise SystemExit(f"::error::dependency cycle in run-graph: {e}") from e
