@@ -88,7 +88,7 @@ runs:
       run: |
         set -euo pipefail
         echo "::group::terramate apply: $STACK"
-        terramate script run --no-recursive -C "$STACK" apply
+        terramate script run --disable-safeguards=git-out-of-sync --no-recursive -C "$STACK" apply
         echo "::endgroup::"
 
     - name: Save state
