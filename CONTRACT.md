@@ -158,14 +158,47 @@ triggered by a pre-merge comment or a post-merge push.
 ## Apply-match fingerprint
 
 Each plan stores a fingerprint (`fingerprint.txt`, artifact `external_id` on the
-apply check): `sha256` over the sorted JSON of every `TF_VAR_*` environment
-variable (name→value) **plus `TF_WORKSPACE` when it is set**. Ephemeral
-credential vars (`AWS_*`, etc.) are excluded. `TF_WORKSPACE` is included because
-it is the workspaces-flavor env identity and is not a `TF_VAR_*`; without it two
-environments of a workspaces stack would fingerprint identically and an apply
-could match the wrong environment's reviewed plan. plan-cell and apply-cell use
-a byte-identical algorithm (`scripts/plan-classify`). On mismatch, apply fails
-safe and reports differing variable **names** only — never values.
+apply check): `sha256` over the sorted JSON of every **non-empty** `TF_VAR_*`
+environment variable (name→value) **plus `TF_WORKSPACE` when it is set**.
+Ephemeral credential vars (`AWS_*`, etc.) are excluded. A set-but-empty
+`TF_VAR_*` is excluded from the payload, so it now hashes identically to that
+variable being absent altogether — a flavor that injects nothing and a flavor
+that injects an empty string for the same name fingerprint the same way.
+`TF_WORKSPACE` is included because it is the workspaces-flavor env identity and
+is not a `TF_VAR_*`; without it two environments of a workspaces stack would
+fingerprint identically and an apply could match the wrong environment's
+reviewed plan. plan-cell and apply-cell use a byte-identical algorithm
+(`scripts/plan-classify`). On mismatch, apply fails safe and reports differing
+variable **names** only — never values.
+
+## Env apply order
+
+A repository may declare a partial order over its GitHub Environments so that
+one environment's stacks fully apply before another's — for example, "`eu`
+fully green, then `us`." The order is a Terramate global,
+`global.shipmate.env_order`: a map from an environment name to the list of
+environments that must complete their applies first (its predecessors). An
+environment absent from the map, or the whole global absent, is unordered
+relative to everything else.
+
+The merge-deploy path topologically sorts this map into **env-levels**
+(level 0 = no predecessors, or not listed at all): all pending applies whose
+environment falls in level 0 run to completion (respecting the existing
+stack-wave DAG within that level) before any env-level-1 apply starts, and so
+on. A failure anywhere in an env-level skips every successor level's applies
+for that deploy run — the failed environment's stacks stay pending, and
+downstream environments are not touched until it is fixed and re-run.
+`MAX_ENV_LEVELS` is `4`; an env-order graph that would span more levels than
+that fails loud rather than silently truncating.
+
+Targeted applies (`mate apply <env>`) act on a single environment and skip
+env-level ordering entirely — there is nothing to order across.
+
+The engine ships this as a reusable, parameterized workflow
+(`.github/workflows/apply-env-level.yml`) that a consuming repo's `deploy.yml`
+calls once per env-level, passing that level's pre-computed wave matrix; the
+workflow itself still fans applies out stack-wave by stack-wave exactly as
+described above (see Fan-out).
 
 ## OpenTofu note
 
