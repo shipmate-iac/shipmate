@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+"""Decide whether a `mate apply` comment is authorized to dispatch.
+
+Pure decision from already-fetched GitHub API JSON. Checks run in fail-fast
+order and each returns a DISTINCT, actionable reason (the reject comment). The
+'comment head SHA == plan run SHA' rule is enforced here: the reviewed plan is
+looked up by the PR's current head, so a plan for an older head (or none at all)
+means new commits landed since the last plan -> stale -> re-plan.
+"""
+
+import json
+import os
+
+
+def _approved(reviews):
+    """True if the latest review per user includes an APPROVED and no
+    CHANGES_REQUESTED. Reviews arrive chronologically; last state per user wins."""
+    latest = {}
+    for r in reviews:
+        state = r.get("state")
+        if state in ("APPROVED", "CHANGES_REQUESTED", "DISMISSED"):
+            latest[r["user"]["login"]] = state
+    states = set(latest.values())
+    return "APPROVED" in states and "CHANGES_REQUESTED" not in states
+
+
+def decide(*, is_member, approvers_team, reviews, pr, plan_run):
+    """Return (authorized, reason). reason is '' when authorized."""
+    if not is_member:
+        return False, (
+            f"not authorized: the commenter is not a member of the "
+            f"required approvers team `{approvers_team}`."
+        )
+    if not pr.get("mergeable"):
+        state = pr.get("mergeable_state", "unknown")
+        return False, (
+            f"PR is not mergeable (state: {state}); resolve conflicts "
+            f"or branch-protection requirements first."
+        )
+    if not _approved(reviews):
+        return False, "PR is not approved; an approving review is required before apply."
+    if not plan_run:
+        return False, (
+            "no reviewed plan for the current PR head — no successful "
+            "preview run to apply. Push or re-run preview, then re-plan."
+        )
+    if plan_run.get("head_sha") != pr["head"]["sha"]:
+        return False, (
+            f"stale: the latest reviewed plan is for {plan_run.get('head_sha')} "
+            f"but the PR head is now {pr['head']['sha']}; re-plan "
+            f"(push or `mate plan`) before applying."
+        )
+    return True, ""
+
+
+def _read_json(var, default):
+    path = os.environ.get(var, "")
+    if not path or not os.path.exists(path):
+        return default
+    with open(path, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def main():
+    reviews = _read_json("REVIEWS_JSON", [])
+    pr = _read_json("PR_JSON", {})
+    plan_run = _read_json("PLAN_RUN_JSON", {})
+    is_member = os.environ.get("IS_MEMBER", "false") == "true"
+    ok, reason = decide(
+        is_member=is_member,
+        approvers_team=os.environ.get("APPROVERS_TEAM", ""),
+        reviews=reviews,
+        pr=pr,
+        plan_run=plan_run,
+    )
+    with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+        fh.write(f"authorized={'true' if ok else 'false'}\n")
+        fh.write(f"reason={reason}\n")
+        fh.write(f"environment={os.environ.get('SHIPMATE_ENV', '')}\n")
+        fh.write(f"plan_run_id={plan_run.get('id', '') if plan_run else ''}\n")
+        fh.write(f"head_sha={pr.get('head', {}).get('sha', '') if pr else ''}\n")
+    print(f"::notice title=authorize::authorized={ok} reason={reason or 'ok'}")
+
+
+if __name__ == "__main__":
+    main()
