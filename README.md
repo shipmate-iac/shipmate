@@ -1,9 +1,8 @@
 # shipmate
 
 > **Status: early development.** shipmate is a work in progress. Action inputs,
-> check names, and tag grammar may change between commits, and some pieces
-> described below are still on the roadmap. Pin by commit SHA (see below) and
-> expect breaking changes.
+> check names, and tag grammar may change between commits. Pin by commit SHA
+> (see below) and expect breaking changes.
 
 shipmate is a set of GitHub Actions composite actions and supporting scripts
 that orchestrate infrastructure-as-code delivery using the Terramate CLI and
@@ -42,12 +41,18 @@ protection rules stay simple even as the number of underlying units grows.
 
 ## Comment-ops
 
-Humans drive plan/apply behavior for a pull request through PR comments
-(for example, requesting a re-plan, or approving an apply for a specific
-stack/environment unit) rather than through bespoke UI or external tooling.
-Comment-ops keep the entire interaction surface inside the pull request
+Humans drive apply behavior for a pull request through PR comments —
+`mate apply <env>` — rather than through bespoke UI or external tooling.
+A private GitHub App mints the short-lived token needed to dispatch the apply
+workflow from a comment (events created with the default `GITHUB_TOKEN` never
+trigger other workflows); the App itself has no `checks` or `issues`
+permission, so check-run writes and PR comments stay on the shared
+`github-actions` identity. Authorization requires team membership, an
+approved and mergeable PR, and a reviewed plan for the PR's current head.
+Comment-ops keeps the entire interaction surface inside the pull request
 that is already the unit of review, with an auditable history of who asked
-for what and when.
+for what and when. See `CONTRACT.md` for the full grammar and authorization
+contract, and `docs/github-app.md` for one-time App setup.
 
 ## Dynamic environments
 
@@ -115,10 +120,13 @@ and `drift.yml` are thin sample-repo workflows over shipmate actions.
   the per-flavor `env:` block and state path differ (folders inject nothing,
   workspaces inject `TF_WORKSPACE`).
 
-Two model notes vs a hosted service: with no server-side queue, GHA can drop a
+One model note vs a hosted service: with no server-side queue, GHA can drop a
 **superseded** deploy run — its stacks stay pending + visible and are recovered
-by re-running that deploy; and the manual **pre-merge** exact-plan apply
-(`mate apply`) is on the roadmap (it needs a GitHub App to update checks).
+by re-running that deploy. The manual **pre-merge** exact-plan apply
+(`mate apply <env>` in a PR comment) shares the same exact-plan `apply-cell`
+path and the same per-env, per-stack concurrency group as `deploy.yml`, so a
+comment-triggered apply and a post-merge deploy can never race against the
+same stack × environment; see Comment-ops above and `CONTRACT.md`.
 
 ## Example repositories
 

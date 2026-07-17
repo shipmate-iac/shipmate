@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+"""Exchange a GitHub App manifest-flow `code` for credentials, then store them.
+
+One-time dev/ops setup. The manifest flow is browser-driven (docs/github-app.md
+walks it): you POST app/manifest.json via a tiny HTML form, GitHub redirects
+with `?code=...`. Paste that code here (MANIFEST_CODE) to convert it to an app
+id + private key, then this stores the id as a repo variable and the key as a
+repo secret via `gh`.
+"""
+
+import json
+import os
+import subprocess
+
+
+def _run(args, **kw):
+    # args is a fixed, code-controlled `gh` invocation (never user input) and
+    # shell=False -- safe.
+    return subprocess.run(args, check=True, capture_output=True, text=True, **kw).stdout  # noqa: S603
+
+
+def main():
+    code = os.environ["MANIFEST_CODE"]
+    repo = os.environ["GITHUB_REPOSITORY"]
+    out = _run(["gh", "api", "-X", "POST", f"app-manifests/{code}/conversions"])
+    app = json.loads(out)
+    app_id = str(app["id"])
+    pem = app["pem"]
+    print(f"App created: id={app_id} slug={app.get('slug')}")
+    _run(["gh", "variable", "set", "SHIPMATE_APP_ID", "--repo", repo, "--body", app_id])
+    _run(["gh", "secret", "set", "SHIPMATE_APP_PRIVATE_KEY", "--repo", repo, "--body", pem])
+    print("Stored SHIPMATE_APP_ID (variable) and SHIPMATE_APP_PRIVATE_KEY (secret).")
+    print("Next: install the App on the sample repos (see docs/github-app.md).")
+
+
+if __name__ == "__main__":
+    main()

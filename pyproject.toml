@@ -25,9 +25,13 @@ line-length = 100
 # steps, not as an importable module), so ruff won't discover them by glob —
 # list them explicitly.
 extend-include = [
+    "scripts/apply-detect",
+    "scripts/authorize",
     "scripts/build-matrix",
+    "scripts/comment-parse",
     "scripts/deploy-detect",
     "scripts/plan-classify",
+    "scripts/register-app",
     "scripts/waves",
 ]
 

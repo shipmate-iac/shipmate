@@ -89,6 +89,46 @@ must appear in Terramate stack tag lists is the `env/<name>` /
 example, a shared stack tagged both `env/staging` and `env/production`)
 when the same stack participates in more than one environment.
 
+## Comment-ops
+
+`mate <verb> <env> [tag-filter]` in a PR comment drives a manual, pre-merge
+apply. The grammar is strict and anchored — the whole comment line must match
+one regex, and the parsed values are never interpolated into a shell. `apply`
+is the only active verb; `plan` and `destroy` are reserved (recognized and
+rejected with a "reserved" message) so the grammar does not need to change
+shape when those verbs are implemented.
+
+A parsed `mate apply <env>` command is authorized only when **all** of the
+following hold, checked in order, each with its own actionable rejection
+reason:
+
+- the commenter is a member of the configured approvers team (checked via a
+  short-lived GitHub App installation token, `members:read`);
+- the pull request is mergeable;
+- the pull request has an approving review outstanding (the latest review per
+  reviewer wins; any `CHANGES_REQUESTED` blocks);
+- a reviewed plan exists for the pull request's **current** head SHA (the
+  most recent successful preview run whose head matches; a plan for an older
+  head means new commits landed since — stale, re-plan required).
+
+The GitHub App used for comment-ops carries exactly this permission set:
+`actions: write`, `pull_requests: write`, `contents: read`, `members: read`.
+It has **no** `checks` permission and **no** `issues` permission — the App
+exists only to mint a `workflow_dispatch` token (events created with the
+default `GITHUB_TOKEN` never trigger other workflows, so a private App is the
+only way to kick off the apply workflow from a comment) and to read team
+membership for authorization. Apply checks are created and completed by
+`apply.yml`'s own `GITHUB_TOKEN` (the shared `github-actions` identity), never
+by the App — check runs are only updatable by the app that created them, and
+every workflow in a repo shares the `github-actions` identity, so keeping
+check writes on `GITHUB_TOKEN` keeps that identity consistent across the
+pre-merge and post-merge paths.
+
+`mate apply` and `deploy.yml` share the same per-env, per-stack
+`apply-<env>-<stack>` concurrency group, so exactly one apply ever runs
+against a given stack × environment at a time, regardless of whether it was
+triggered by a pre-merge comment or a post-merge push.
+
 ## Consumption
 
 - Consuming repositories and workflows pin every shipmate action **by

@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+"""apply.yml detect: a dispatched single-env apply's work set + waves.
+
+Unlike deploy-detect (merge-driven, all envs), the work set here is scoped to
+ONE environment and sourced from a specific preview run's plan artifacts:
+`plan-<slug>-<env>` artifacts present in SHIPMATE_PLAN_RUN_ID name exactly the
+stacks that were planned for this env. We map each present slug back to a stack
+PATH via the run-graph (path->slug is one-way; we slug each graph node forward
+and match), drop cells whose apply check already completed (idempotent no-op),
+then wave-order. A targeted `mate apply <env>` is single-env and explicit by
+design — it never blocks on other environments; region-level sequencing across
+envs is handled separately on the apply-all path.
+"""
+
+import importlib.util
+import json
+import os
+import pathlib
+from graphlib import CycleError
+from importlib.machinery import SourceFileLoader
+
+_D = pathlib.Path(__file__).resolve().parent
+
+
+def _load(fname):
+    loader = SourceFileLoader(fname.replace("-", "_"), str(_D / fname))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+bm = _load("build-matrix")
+wv = _load("waves")
+
+
+def _slug(path):
+    return path.replace("/", "-")
+
+
+def workset_from_artifacts(artifact_names, env, graph_paths):
+    """Cells for `env` = graph stacks whose exact `plan-<slug>-<env>` artifact is
+    present in the plan run. Forward-construct the expected name per graph path
+    (never reverse-parse the artifact name): both `slug` and `env` can contain
+    '-', so a reverse split is ambiguous and lets a dash-suffix env (e.g. `eu`)
+    cross-match another env's artifacts (`...-dev-eu`). Forward matching avoids
+    that. path->slug is many-to-one, so fail loud if two paths collide."""
+    names = set(artifact_names)
+    cells = [
+        {"stack": p, "environment": env} for p in graph_paths if f"plan-{_slug(p)}-{env}" in names
+    ]
+    slugs = [_slug(c["stack"]) for c in cells]
+    dupes = sorted({s for s in slugs if slugs.count(s) > 1})
+    if dupes:
+        raise SystemExit(
+            f"::error::stack path slug collision {dupes}: distinct stack paths map "
+            "to the same artifact slug; rename so the path->'-' slug is unique."
+        )
+    return cells
+
+
+def filter_pending(cells, completed_names):
+    return [c for c in cells if f"apply / {c['environment']} / {c['stack']}" not in completed_names]
+
+
+def _artifact_names(repo, run_id):
+    data = bm._run(
+        [
+            "gh",
+            "api",
+            "--paginate",
+            "--jq",
+            ".artifacts[].name",
+            f"repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100",
+        ]
+    )
+    return [ln.strip() for ln in data.splitlines() if ln.strip()]
+
+
+def main():
+    repo = os.environ["GITHUB_REPOSITORY"]
+    env = os.environ["SHIPMATE_ENV"]
+    plan_run_id = os.environ["SHIPMATE_PLAN_RUN_ID"]
+    head = os.environ["SHIPMATE_HEAD_SHA"]
+
+    graph = bm._run(["terramate", "experimental", "run-graph", "--label", "stack.dir"])
+    deps = wv.parse_dot(graph)
+    graph_paths = list(deps.keys())
+
+    names = _artifact_names(repo, plan_run_id)
+    cells = workset_from_artifacts(names, env, graph_paths)
+
+    checks_jsonl = bm._run(
+        [
+            "gh",
+            "api",
+            "--paginate",
+            "--jq",
+            ".check_runs[]",
+            f"repos/{repo}/commits/{head}/check-runs?per_page=100",
+        ]
+    )
+    checks = [json.loads(line) for line in checks_jsonl.splitlines() if line.strip()]
+    completed = {
+        c["name"] for c in checks if c["name"].startswith("apply / ") and c["status"] == "completed"
+    }
+    pending = filter_pending(cells, completed)
+
+    waves = wv.assign_waves(wv.levels(deps), pending)
+    wv.guard_max_waves(waves)
+    print(
+        f"::notice title=apply-detect::env={env} plan_run={plan_run_id} head={head} "
+        f"cells={len(cells)} completed={len(completed)} pending={len(pending)} "
+        f"waves={[len(w) for w in waves]} empty={not any(waves)}"
+    )
+    with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+        wv.write_waves(fh, waves)
+        fh.write(f"head_sha={head}\n")
+        fh.write(f"preview_run_id={plan_run_id}\n")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except CycleError as e:
+        raise SystemExit(f"::error::dependency cycle in run-graph: {e}") from e
