@@ -22,7 +22,7 @@ jobs:
     name: apply / ${{ matrix.environment }} / ${{ matrix.stack }}
     env:
       # Flavor-agnostic: unset vars resolve to "" and are excluded from the
-      # fingerprint (Task 1), so folders (no vars) still match their plan.
+      # fingerprint (empty TF_VAR_* aren't hashed), so folders (no vars) still match their plan.
       TF_VAR_env: ${{ vars.TF_VAR_env }}
       TF_VAR_region: ${{ vars.TF_VAR_region }}
       TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
@@ -58,7 +58,7 @@ jobs:
     name: apply / ${{ matrix.environment }} / ${{ matrix.stack }}
     env:
       # Flavor-agnostic: unset vars resolve to "" and are excluded from the
-      # fingerprint (Task 1), so folders (no vars) still match their plan.
+      # fingerprint (empty TF_VAR_* aren't hashed), so folders (no vars) still match their plan.
       TF_VAR_env: ${{ vars.TF_VAR_env }}
       TF_VAR_region: ${{ vars.TF_VAR_region }}
       TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
@@ -94,7 +94,7 @@ jobs:
     name: apply / ${{ matrix.environment }} / ${{ matrix.stack }}
     env:
       # Flavor-agnostic: unset vars resolve to "" and are excluded from the
-      # fingerprint (Task 1), so folders (no vars) still match their plan.
+      # fingerprint (empty TF_VAR_* aren't hashed), so folders (no vars) still match their plan.
       TF_VAR_env: ${{ vars.TF_VAR_env }}
       TF_VAR_region: ${{ vars.TF_VAR_region }}
       TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
@@ -130,7 +130,7 @@ jobs:
     name: apply / ${{ matrix.environment }} / ${{ matrix.stack }}
     env:
       # Flavor-agnostic: unset vars resolve to "" and are excluded from the
-      # fingerprint (Task 1), so folders (no vars) still match their plan.
+      # fingerprint (empty TF_VAR_* aren't hashed), so folders (no vars) still match their plan.
       TF_VAR_env: ${{ vars.TF_VAR_env }}
       TF_VAR_region: ${{ vars.TF_VAR_region }}
       TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
@@ -166,7 +166,7 @@ jobs:
     name: apply / ${{ matrix.environment }} / ${{ matrix.stack }}
     env:
       # Flavor-agnostic: unset vars resolve to "" and are excluded from the
-      # fingerprint (Task 1), so folders (no vars) still match their plan.
+      # fingerprint (empty TF_VAR_* aren't hashed), so folders (no vars) still match their plan.
       TF_VAR_env: ${{ vars.TF_VAR_env }}
       TF_VAR_region: ${{ vars.TF_VAR_region }}
       TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
@@ -202,7 +202,7 @@ jobs:
     name: apply / ${{ matrix.environment }} / ${{ matrix.stack }}
     env:
       # Flavor-agnostic: unset vars resolve to "" and are excluded from the
-      # fingerprint (Task 1), so folders (no vars) still match their plan.
+      # fingerprint (empty TF_VAR_* aren't hashed), so folders (no vars) still match their plan.
       TF_VAR_env: ${{ vars.TF_VAR_env }}
       TF_VAR_region: ${{ vars.TF_VAR_region }}
       TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
@@ -238,7 +238,7 @@ jobs:
     name: apply / ${{ matrix.environment }} / ${{ matrix.stack }}
     env:
       # Flavor-agnostic: unset vars resolve to "" and are excluded from the
-      # fingerprint (Task 1), so folders (no vars) still match their plan.
+      # fingerprint (empty TF_VAR_* aren't hashed), so folders (no vars) still match their plan.
       TF_VAR_env: ${{ vars.TF_VAR_env }}
       TF_VAR_region: ${{ vars.TF_VAR_region }}
       TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
@@ -274,7 +274,7 @@ jobs:
     name: apply / ${{ matrix.environment }} / ${{ matrix.stack }}
     env:
       # Flavor-agnostic: unset vars resolve to "" and are excluded from the
-      # fingerprint (Task 1), so folders (no vars) still match their plan.
+      # fingerprint (empty TF_VAR_* aren't hashed), so folders (no vars) still match their plan.
       TF_VAR_env: ${{ vars.TF_VAR_env }}
       TF_VAR_region: ${{ vars.TF_VAR_region }}
       TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
