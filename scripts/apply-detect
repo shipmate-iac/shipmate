@@ -7,7 +7,9 @@ ONE environment and sourced from a specific preview run's plan artifacts:
 stacks that were planned for this env. We map each present slug back to a stack
 PATH via the run-graph (path->slug is one-way; we slug each graph node forward
 and match), drop cells whose apply check already completed (idempotent no-op),
-guard against a cross-env dependency still pending elsewhere, then wave-order.
+then wave-order. A targeted `mate apply <env>` is single-env and explicit by
+design — it never blocks on other environments; region-level sequencing across
+envs is handled separately on the apply-all path.
 """
 
 import importlib.util
@@ -47,32 +49,6 @@ def workset_from_artifacts(artifact_names, env, graph_paths):
 
 def filter_pending(cells, completed_names):
     return [c for c in cells if f"apply / {c['environment']} / {c['stack']}" not in completed_names]
-
-
-def cross_env_block(cells, deps, pending_other_by_stack, env_stacks=None):
-    """Return the name of a blocking check, or None. A requested cell is blocked
-    if a transitive upstream stack is NOT in this env's work set but has a
-    pending apply check under a different env.
-
-    `env_stacks` is the FULL env work set (all stacks in this env, not just the
-    still-pending `cells`) — on a retry after partial failure, an already-applied
-    same-env upstream is no longer in `cells` and must not be mistaken for an
-    out-of-env stack. Defaults to `cells`' own stacks for the existing 3-arg
-    callers/tests."""
-    env_stacks = env_stacks if env_stacks is not None else {c["stack"] for c in cells}
-
-    def upstreams(stack, seen):
-        for up in deps.get(stack, set()):
-            if up not in seen:
-                seen.add(up)
-                upstreams(up, seen)
-        return seen
-
-    for c in cells:
-        for up in upstreams(c["stack"], set()):
-            if up not in env_stacks and up in pending_other_by_stack:
-                return pending_other_by_stack[up]
-    return None
 
 
 def _artifact_names(repo, run_id):
@@ -117,23 +93,6 @@ def main():
         c["name"] for c in checks if c["name"].startswith("apply / ") and c["status"] == "completed"
     }
     pending = filter_pending(cells, completed)
-
-    # Cross-env prerequisite guard: pending apply checks under OTHER envs, keyed
-    # by stack. Name format: "apply / <env> / <stack>".
-    pending_other = {}
-    for c in checks:
-        name = c["name"]
-        if name.startswith("apply / ") and c["status"] != "completed":
-            parts = name.split(" / ", 2)
-            if len(parts) == 3 and parts[1] != env:
-                pending_other[parts[2]] = name
-    blocking = cross_env_block(pending, deps, pending_other, env_stacks={c["stack"] for c in cells})
-    if blocking:
-        raise SystemExit(
-            f"::error::cross-env prerequisite pending: an upstream dependency is "
-            f"still pending under another environment ('{blocking}'). Apply it "
-            f"first, then re-run `mate apply {env}`."
-        )
 
     waves = wv.assign_waves(wv.levels(deps), pending)
     wv.guard_max_waves(waves)
