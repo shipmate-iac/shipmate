@@ -28,10 +28,12 @@ def test_valid_apply():
     }
 
 
-def test_valid_apply_with_tag_filter():
+def test_tag_filter_rejected_not_yet_supported():
+    # Parsed for forward-compat but no component honors it → reject rather than
+    # silently apply the whole env.
     r = cp.parse("mate apply dev-eu workload:app")
-    assert r["valid"] and r["verb"] == "apply" and r["env"] == "dev-eu"
-    assert r["tag_filter"] == "workload:app"
+    assert r["is_command"] and not r["valid"] and "tag-filter" in r["error"]
+    assert r["verb"] == "apply" and r["env"] == "dev-eu" and r["tag_filter"] == "workload:app"
 
 
 def test_leading_trailing_whitespace_and_crlf():

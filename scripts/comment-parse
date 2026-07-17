@@ -48,6 +48,11 @@ def parse(body):
     if verb not in VERBS_ACTIVE:
         result["error"] = f"unknown verb `{verb}` (supported: {', '.join(sorted(VERBS_ACTIVE))})"
         return result
+    if tag is not None:
+        # Parsed for forward-compat, but no component honors it yet — reject
+        # rather than silently apply the whole env (matches reserved-verb handling).
+        result["error"] = "tag-filter is not yet supported (omit it: `mate <verb> <env>`)"
+        return result
     result["valid"] = True
     return result
 
