@@ -14,12 +14,15 @@ import os
 
 def _approved(reviews):
     """True if the latest review per user includes an APPROVED and no
-    CHANGES_REQUESTED. Reviews arrive chronologically; last state per user wins."""
+    CHANGES_REQUESTED. Reviews arrive chronologically; last state per user wins.
+    Reviews from deleted accounts arrive with `"user": null` — skip them, since
+    there's no login to key the "latest per user" map on."""
     latest = {}
     for r in reviews:
+        login = (r.get("user") or {}).get("login")
         state = r.get("state")
-        if state in ("APPROVED", "CHANGES_REQUESTED", "DISMISSED"):
-            latest[r["user"]["login"]] = state
+        if login and state in ("APPROVED", "CHANGES_REQUESTED", "DISMISSED"):
+            latest[login] = state
     states = set(latest.values())
     return "APPROVED" in states and "CHANGES_REQUESTED" not in states
 

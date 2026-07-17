@@ -89,3 +89,15 @@ def test_mergeable_null_treated_as_not_ready():
         pr={"mergeable": None, "mergeable_state": "unknown", "head": {"sha": "abc123"}}
     )
     assert not ok and "not mergeable" in reason
+
+
+def test_approved_ignores_null_user_review():
+    # a review from a deleted account arrives with "user": null; it must be
+    # skipped rather than crashing, and a valid approval alongside it still
+    # authorizes.
+    reviews = [
+        {"user": None, "state": "APPROVED"},
+        {"user": {"login": "rev"}, "state": "APPROVED"},
+    ]
+    ok, reason = _decide(reviews=reviews)
+    assert ok and reason == ""
