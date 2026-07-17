@@ -173,7 +173,7 @@ variable **names** only — never values.
 
 ## Terramate safeguards
 
-Terramate ships five default-on safeguards that run before `terramate run` /
+Terramate ships four default-on safeguards that run before `terramate run` /
 `terramate script run` (not before `list` / `generate` / `experimental`).
 shipmate applies a **specific reviewed SHA** — the plan artifact reviewed on the
 pull request — which on the merge-deploy path is legitimately **behind `main`**
