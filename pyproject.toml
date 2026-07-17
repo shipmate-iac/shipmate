@@ -31,6 +31,7 @@ extend-include = [
     "scripts/comment-parse",
     "scripts/deploy-detect",
     "scripts/plan-classify",
+    "scripts/register-app",
     "scripts/waves",
 ]
 

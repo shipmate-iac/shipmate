@@ -1,0 +1,13 @@
+{
+  "name": "shipmate",
+  "url": "https://github.com/shipmate-iac/shipmate",
+  "hook_attributes": { "active": false },
+  "public": false,
+  "default_permissions": {
+    "actions": "write",
+    "pull_requests": "write",
+    "contents": "read",
+    "members": "read"
+  },
+  "default_events": []
+}
