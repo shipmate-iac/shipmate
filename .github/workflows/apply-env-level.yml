@@ -1,0 +1,296 @@
+name: apply-env-level
+on:
+  workflow_call:
+    inputs:
+      waves_json: { required: true, type: string }
+      head_sha: { required: true, type: string }
+      preview_run_id: { required: true, type: string }
+      state_suffix: { required: true, type: string }
+jobs:
+  wave0:
+    if: ${{ !failure() && !cancelled() && toJSON(fromJSON(inputs.waves_json).wave0) != '[]' }}
+    runs-on: ubuntu-latest
+    permissions: { contents: read, checks: write, actions: read }
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.waves_json).wave0 }}
+    environment: ${{ matrix.environment }}-apply
+    concurrency:
+      group: apply-${{ matrix.environment }}-${{ matrix.stack }}
+      cancel-in-progress: false
+    name: apply / ${{ matrix.environment }} / ${{ matrix.stack }}
+    env:
+      # Flavor-agnostic: unset vars resolve to "" and are excluded from the
+      # fingerprint (empty TF_VAR_* aren't hashed), so folders (no vars) still match their plan.
+      TF_VAR_env: ${{ vars.TF_VAR_env }}
+      TF_VAR_region: ${{ vars.TF_VAR_region }}
+      TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { fetch-depth: 0, ref: "${{ inputs.head_sha }}" }
+      - uses: shipmate-iac/shipmate/actions/setup@72e6a43635ed23bc24dd2b36cf5bae20bdb91b4a
+        with:
+          terramate-version: ${{ vars.TERRAMATE_VERSION }}
+          tofu-version: ${{ vars.TOFU_VERSION }}
+      - uses: shipmate-iac/shipmate/actions/apply-cell@72e6a43635ed23bc24dd2b36cf5bae20bdb91b4a
+        with:
+          stack: ${{ matrix.stack }}
+          stack-name: ${{ matrix.stack }}
+          env: ${{ matrix.environment }}
+          head-sha: ${{ inputs.head_sha }}
+          preview-run-id: ${{ inputs.preview_run_id }}
+          state-path: ${{ matrix.stack }}/${{ inputs.state_suffix }}
+          github-token: ${{ github.token }}
+  wave1:
+    needs: [wave0]
+    if: ${{ !failure() && !cancelled() && toJSON(fromJSON(inputs.waves_json).wave1) != '[]' }}
+    runs-on: ubuntu-latest
+    permissions: { contents: read, checks: write, actions: read }
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.waves_json).wave1 }}
+    environment: ${{ matrix.environment }}-apply
+    concurrency:
+      group: apply-${{ matrix.environment }}-${{ matrix.stack }}
+      cancel-in-progress: false
+    name: apply / ${{ matrix.environment }} / ${{ matrix.stack }}
+    env:
+      # Flavor-agnostic: unset vars resolve to "" and are excluded from the
+      # fingerprint (empty TF_VAR_* aren't hashed), so folders (no vars) still match their plan.
+      TF_VAR_env: ${{ vars.TF_VAR_env }}
+      TF_VAR_region: ${{ vars.TF_VAR_region }}
+      TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { fetch-depth: 0, ref: "${{ inputs.head_sha }}" }
+      - uses: shipmate-iac/shipmate/actions/setup@72e6a43635ed23bc24dd2b36cf5bae20bdb91b4a
+        with:
+          terramate-version: ${{ vars.TERRAMATE_VERSION }}
+          tofu-version: ${{ vars.TOFU_VERSION }}
+      - uses: shipmate-iac/shipmate/actions/apply-cell@72e6a43635ed23bc24dd2b36cf5bae20bdb91b4a
+        with:
+          stack: ${{ matrix.stack }}
+          stack-name: ${{ matrix.stack }}
+          env: ${{ matrix.environment }}
+          head-sha: ${{ inputs.head_sha }}
+          preview-run-id: ${{ inputs.preview_run_id }}
+          state-path: ${{ matrix.stack }}/${{ inputs.state_suffix }}
+          github-token: ${{ github.token }}
+  wave2:
+    needs: [wave0, wave1]
+    if: ${{ !failure() && !cancelled() && toJSON(fromJSON(inputs.waves_json).wave2) != '[]' }}
+    runs-on: ubuntu-latest
+    permissions: { contents: read, checks: write, actions: read }
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.waves_json).wave2 }}
+    environment: ${{ matrix.environment }}-apply
+    concurrency:
+      group: apply-${{ matrix.environment }}-${{ matrix.stack }}
+      cancel-in-progress: false
+    name: apply / ${{ matrix.environment }} / ${{ matrix.stack }}
+    env:
+      # Flavor-agnostic: unset vars resolve to "" and are excluded from the
+      # fingerprint (empty TF_VAR_* aren't hashed), so folders (no vars) still match their plan.
+      TF_VAR_env: ${{ vars.TF_VAR_env }}
+      TF_VAR_region: ${{ vars.TF_VAR_region }}
+      TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { fetch-depth: 0, ref: "${{ inputs.head_sha }}" }
+      - uses: shipmate-iac/shipmate/actions/setup@72e6a43635ed23bc24dd2b36cf5bae20bdb91b4a
+        with:
+          terramate-version: ${{ vars.TERRAMATE_VERSION }}
+          tofu-version: ${{ vars.TOFU_VERSION }}
+      - uses: shipmate-iac/shipmate/actions/apply-cell@72e6a43635ed23bc24dd2b36cf5bae20bdb91b4a
+        with:
+          stack: ${{ matrix.stack }}
+          stack-name: ${{ matrix.stack }}
+          env: ${{ matrix.environment }}
+          head-sha: ${{ inputs.head_sha }}
+          preview-run-id: ${{ inputs.preview_run_id }}
+          state-path: ${{ matrix.stack }}/${{ inputs.state_suffix }}
+          github-token: ${{ github.token }}
+  wave3:
+    needs: [wave0, wave1, wave2]
+    if: ${{ !failure() && !cancelled() && toJSON(fromJSON(inputs.waves_json).wave3) != '[]' }}
+    runs-on: ubuntu-latest
+    permissions: { contents: read, checks: write, actions: read }
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.waves_json).wave3 }}
+    environment: ${{ matrix.environment }}-apply
+    concurrency:
+      group: apply-${{ matrix.environment }}-${{ matrix.stack }}
+      cancel-in-progress: false
+    name: apply / ${{ matrix.environment }} / ${{ matrix.stack }}
+    env:
+      # Flavor-agnostic: unset vars resolve to "" and are excluded from the
+      # fingerprint (empty TF_VAR_* aren't hashed), so folders (no vars) still match their plan.
+      TF_VAR_env: ${{ vars.TF_VAR_env }}
+      TF_VAR_region: ${{ vars.TF_VAR_region }}
+      TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { fetch-depth: 0, ref: "${{ inputs.head_sha }}" }
+      - uses: shipmate-iac/shipmate/actions/setup@72e6a43635ed23bc24dd2b36cf5bae20bdb91b4a
+        with:
+          terramate-version: ${{ vars.TERRAMATE_VERSION }}
+          tofu-version: ${{ vars.TOFU_VERSION }}
+      - uses: shipmate-iac/shipmate/actions/apply-cell@72e6a43635ed23bc24dd2b36cf5bae20bdb91b4a
+        with:
+          stack: ${{ matrix.stack }}
+          stack-name: ${{ matrix.stack }}
+          env: ${{ matrix.environment }}
+          head-sha: ${{ inputs.head_sha }}
+          preview-run-id: ${{ inputs.preview_run_id }}
+          state-path: ${{ matrix.stack }}/${{ inputs.state_suffix }}
+          github-token: ${{ github.token }}
+  wave4:
+    needs: [wave0, wave1, wave2, wave3]
+    if: ${{ !failure() && !cancelled() && toJSON(fromJSON(inputs.waves_json).wave4) != '[]' }}
+    runs-on: ubuntu-latest
+    permissions: { contents: read, checks: write, actions: read }
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.waves_json).wave4 }}
+    environment: ${{ matrix.environment }}-apply
+    concurrency:
+      group: apply-${{ matrix.environment }}-${{ matrix.stack }}
+      cancel-in-progress: false
+    name: apply / ${{ matrix.environment }} / ${{ matrix.stack }}
+    env:
+      # Flavor-agnostic: unset vars resolve to "" and are excluded from the
+      # fingerprint (empty TF_VAR_* aren't hashed), so folders (no vars) still match their plan.
+      TF_VAR_env: ${{ vars.TF_VAR_env }}
+      TF_VAR_region: ${{ vars.TF_VAR_region }}
+      TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { fetch-depth: 0, ref: "${{ inputs.head_sha }}" }
+      - uses: shipmate-iac/shipmate/actions/setup@72e6a43635ed23bc24dd2b36cf5bae20bdb91b4a
+        with:
+          terramate-version: ${{ vars.TERRAMATE_VERSION }}
+          tofu-version: ${{ vars.TOFU_VERSION }}
+      - uses: shipmate-iac/shipmate/actions/apply-cell@72e6a43635ed23bc24dd2b36cf5bae20bdb91b4a
+        with:
+          stack: ${{ matrix.stack }}
+          stack-name: ${{ matrix.stack }}
+          env: ${{ matrix.environment }}
+          head-sha: ${{ inputs.head_sha }}
+          preview-run-id: ${{ inputs.preview_run_id }}
+          state-path: ${{ matrix.stack }}/${{ inputs.state_suffix }}
+          github-token: ${{ github.token }}
+  wave5:
+    needs: [wave0, wave1, wave2, wave3, wave4]
+    if: ${{ !failure() && !cancelled() && toJSON(fromJSON(inputs.waves_json).wave5) != '[]' }}
+    runs-on: ubuntu-latest
+    permissions: { contents: read, checks: write, actions: read }
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.waves_json).wave5 }}
+    environment: ${{ matrix.environment }}-apply
+    concurrency:
+      group: apply-${{ matrix.environment }}-${{ matrix.stack }}
+      cancel-in-progress: false
+    name: apply / ${{ matrix.environment }} / ${{ matrix.stack }}
+    env:
+      # Flavor-agnostic: unset vars resolve to "" and are excluded from the
+      # fingerprint (empty TF_VAR_* aren't hashed), so folders (no vars) still match their plan.
+      TF_VAR_env: ${{ vars.TF_VAR_env }}
+      TF_VAR_region: ${{ vars.TF_VAR_region }}
+      TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { fetch-depth: 0, ref: "${{ inputs.head_sha }}" }
+      - uses: shipmate-iac/shipmate/actions/setup@72e6a43635ed23bc24dd2b36cf5bae20bdb91b4a
+        with:
+          terramate-version: ${{ vars.TERRAMATE_VERSION }}
+          tofu-version: ${{ vars.TOFU_VERSION }}
+      - uses: shipmate-iac/shipmate/actions/apply-cell@72e6a43635ed23bc24dd2b36cf5bae20bdb91b4a
+        with:
+          stack: ${{ matrix.stack }}
+          stack-name: ${{ matrix.stack }}
+          env: ${{ matrix.environment }}
+          head-sha: ${{ inputs.head_sha }}
+          preview-run-id: ${{ inputs.preview_run_id }}
+          state-path: ${{ matrix.stack }}/${{ inputs.state_suffix }}
+          github-token: ${{ github.token }}
+  wave6:
+    needs: [wave0, wave1, wave2, wave3, wave4, wave5]
+    if: ${{ !failure() && !cancelled() && toJSON(fromJSON(inputs.waves_json).wave6) != '[]' }}
+    runs-on: ubuntu-latest
+    permissions: { contents: read, checks: write, actions: read }
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.waves_json).wave6 }}
+    environment: ${{ matrix.environment }}-apply
+    concurrency:
+      group: apply-${{ matrix.environment }}-${{ matrix.stack }}
+      cancel-in-progress: false
+    name: apply / ${{ matrix.environment }} / ${{ matrix.stack }}
+    env:
+      # Flavor-agnostic: unset vars resolve to "" and are excluded from the
+      # fingerprint (empty TF_VAR_* aren't hashed), so folders (no vars) still match their plan.
+      TF_VAR_env: ${{ vars.TF_VAR_env }}
+      TF_VAR_region: ${{ vars.TF_VAR_region }}
+      TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { fetch-depth: 0, ref: "${{ inputs.head_sha }}" }
+      - uses: shipmate-iac/shipmate/actions/setup@72e6a43635ed23bc24dd2b36cf5bae20bdb91b4a
+        with:
+          terramate-version: ${{ vars.TERRAMATE_VERSION }}
+          tofu-version: ${{ vars.TOFU_VERSION }}
+      - uses: shipmate-iac/shipmate/actions/apply-cell@72e6a43635ed23bc24dd2b36cf5bae20bdb91b4a
+        with:
+          stack: ${{ matrix.stack }}
+          stack-name: ${{ matrix.stack }}
+          env: ${{ matrix.environment }}
+          head-sha: ${{ inputs.head_sha }}
+          preview-run-id: ${{ inputs.preview_run_id }}
+          state-path: ${{ matrix.stack }}/${{ inputs.state_suffix }}
+          github-token: ${{ github.token }}
+  wave7:
+    needs: [wave0, wave1, wave2, wave3, wave4, wave5, wave6]
+    if: ${{ !failure() && !cancelled() && toJSON(fromJSON(inputs.waves_json).wave7) != '[]' }}
+    runs-on: ubuntu-latest
+    permissions: { contents: read, checks: write, actions: read }
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.waves_json).wave7 }}
+    environment: ${{ matrix.environment }}-apply
+    concurrency:
+      group: apply-${{ matrix.environment }}-${{ matrix.stack }}
+      cancel-in-progress: false
+    name: apply / ${{ matrix.environment }} / ${{ matrix.stack }}
+    env:
+      # Flavor-agnostic: unset vars resolve to "" and are excluded from the
+      # fingerprint (empty TF_VAR_* aren't hashed), so folders (no vars) still match their plan.
+      TF_VAR_env: ${{ vars.TF_VAR_env }}
+      TF_VAR_region: ${{ vars.TF_VAR_region }}
+      TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { fetch-depth: 0, ref: "${{ inputs.head_sha }}" }
+      - uses: shipmate-iac/shipmate/actions/setup@72e6a43635ed23bc24dd2b36cf5bae20bdb91b4a
+        with:
+          terramate-version: ${{ vars.TERRAMATE_VERSION }}
+          tofu-version: ${{ vars.TOFU_VERSION }}
+      - uses: shipmate-iac/shipmate/actions/apply-cell@72e6a43635ed23bc24dd2b36cf5bae20bdb91b4a
+        with:
+          stack: ${{ matrix.stack }}
+          stack-name: ${{ matrix.stack }}
+          env: ${{ matrix.environment }}
+          head-sha: ${{ inputs.head_sha }}
+          preview-run-id: ${{ inputs.preview_run_id }}
+          state-path: ${{ matrix.stack }}/${{ inputs.state_suffix }}
+          github-token: ${{ github.token }}
