@@ -103,7 +103,7 @@ def main(argv):
         lv = levels(deps)
     except CycleError as e:
         raise SystemExit(f"::error::dependency cycle in run-graph: {e}") from e
-    waves = assign_waves(lv, json.loads(os.environ.get("SHIPMATE_WORKSET", "[]")))
+    waves = assign_waves(lv, json.loads(os.environ.get("SHIPMATE_WORKSET") or "[]"))
     if "--reverse" in argv:
         waves = list(reversed(waves))
     # Guard AFTER reversing: --reverse can move a populated low level past index 7,

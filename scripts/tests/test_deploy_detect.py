@@ -2,6 +2,8 @@ import importlib.util
 import pathlib
 from importlib.machinery import SourceFileLoader
 
+import pytest
+
 _p = pathlib.Path(__file__).resolve().parents[1] / "deploy-detect"
 _loader = SourceFileLoader("deploy_detect", str(_p))
 _spec = importlib.util.spec_from_loader("deploy_detect", _loader)
@@ -142,3 +144,12 @@ def test_merged_head_mix_of_merged_and_open_picks_merged(monkeypatch):
 def test_merged_head_no_pulls_returns_merge_sha(monkeypatch):
     monkeypatch.setattr(dd, "_gh_json", lambda path: [])
     assert dd._merged_head("o/r", "merge123", _attempts=1, _sleep=0) == "merge123"
+
+
+def test_check_runs_jsonl_parsing_reuses_apply_gates_parse_jsonl():
+    # deploy-detect's check-runs JSONL parsing must not roll its own
+    # json.loads-per-line loop -- a malformed line should raise SystemExit
+    # naming the offending line, via the single shared implementation.
+    with pytest.raises(SystemExit) as exc_info:
+        dd.ag.parse_jsonl(['{"a": 1}', "not-json-garbage-{{{"])
+    assert "not-json-garbage" in str(exc_info.value)

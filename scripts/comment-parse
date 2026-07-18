@@ -21,6 +21,14 @@ VERBS_ACTIVE = {"apply"}
 VERBS_RESERVED = {"plan", "destroy"}
 
 
+def _is_recognized_command(line):
+    """True if `line` fully matches the command grammar AND its verb is one
+    shipmate knows about (active or reserved) -- as opposed to merely fitting
+    the generic `mate <word> <word>` shape (e.g. `mate is great`)."""
+    m = _CMD.match(line)
+    return m is not None and m.group("verb") in (VERBS_ACTIVE | VERBS_RESERVED)
+
+
 def parse(body):
     """Return the parse result dict (see plan Interfaces). Never raises."""
     result = {
@@ -31,8 +39,14 @@ def parse(body):
         "tag_filter": None,
         "error": None,
     }
-    stripped = (ln.strip() for ln in body.splitlines())
-    line = next((ln for ln in stripped if _MATE_LINE.match(ln)), None)
+    lines = [ln.strip() for ln in body.splitlines()]
+    # Prefer the first line that's a fully recognized command over the first
+    # merely mate-prefixed line -- otherwise incidental chatter like
+    # "mate is great" ahead of a real "mate apply dev-eu" would win and bury
+    # the actual command behind an "unknown verb" error.
+    line = next((ln for ln in lines if _is_recognized_command(ln)), None)
+    if line is None:
+        line = next((ln for ln in lines if _MATE_LINE.match(ln)), None)
     if line is None:
         return result
     result["is_command"] = True

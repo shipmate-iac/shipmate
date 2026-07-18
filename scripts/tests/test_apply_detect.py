@@ -78,6 +78,15 @@ def test_completed_failure_apply_stays_pending():
     assert ad.filter_pending(cells, done) == cells
 
 
+def test_check_runs_jsonl_parsing_reuses_apply_gates_parse_jsonl():
+    # apply-detect's check-runs JSONL parsing must not roll its own
+    # json.loads-per-line loop -- a malformed line should raise SystemExit
+    # naming the offending line, via the single shared implementation.
+    with pytest.raises(SystemExit) as exc_info:
+        ad.ag.parse_jsonl(['{"a": 1}', "not-json-garbage-{{{"])
+    assert "not-json-garbage" in str(exc_info.value)
+
+
 def test_verify_plan_run_rejects_mismatched_head_sha(monkeypatch):
     monkeypatch.setattr(
         ad,

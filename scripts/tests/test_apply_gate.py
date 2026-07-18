@@ -2,6 +2,8 @@ import importlib.util
 import pathlib
 from importlib.machinery import SourceFileLoader
 
+import pytest
+
 _D = pathlib.Path(__file__).resolve().parents[1]
 
 
@@ -156,3 +158,24 @@ def test_done_names_uses_latest_run_per_name():
 def test_latest_by_name_ignores_non_apply_checks():
     runs = [_run("plan / dev-eu / stacks/app", "completed", "success")]
     assert ag.latest_by_name(runs) == {}
+
+
+def test_parse_jsonl_returns_objects_for_valid_lines():
+    lines = ['{"a": 1}', "", '{"b": 2}']
+    assert ag.parse_jsonl(lines) == [{"a": 1}, {"b": 2}]
+
+
+def test_parse_jsonl_malformed_line_raises_systemexit_naming_line():
+    lines = ['{"a": 1}', "not-json-garbage-{{{", '{"b": 2}']
+    with pytest.raises(SystemExit) as exc_info:
+        ag.parse_jsonl(lines)
+    assert "not-json-garbage" in str(exc_info.value)
+
+
+def test_parse_jsonl_truncates_long_offending_line():
+    long_garbage = "x" * 500
+    with pytest.raises(SystemExit) as exc_info:
+        ag.parse_jsonl([long_garbage])
+    msg = str(exc_info.value)
+    assert len(msg) < 300
+    assert "xxx" in msg

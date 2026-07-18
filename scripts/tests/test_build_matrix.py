@@ -56,6 +56,21 @@ def test_list_stacks_all_omits_changed_flag(monkeypatch):
     assert captured["args"] == ["terramate", "list"]
 
 
+def test_tags_evals_with_as_json(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(bm, "_run", lambda args: captured.update(args=args) or '["env/dev-eu"]')
+    assert bm._tags("stacks/app") == ["env/dev-eu"]
+    assert captured["args"] == [
+        "terramate",
+        "-C",
+        "stacks/app",
+        "experimental",
+        "eval",
+        "--as-json",
+        "terramate.stack.tags",
+    ]
+
+
 def test_compute_cells_fans_out_and_guards_untagged(monkeypatch):
     monkeypatch.setattr(bm, "_list_stacks", lambda all_stacks, base: ["stacks/app"])
     monkeypatch.setattr(bm, "_tags", lambda s: ["env/dev-eu", "env/dev-us", "workload/app"])

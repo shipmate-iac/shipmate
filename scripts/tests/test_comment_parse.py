@@ -91,3 +91,22 @@ def test_matey_prefix_is_not_a_command():
 def test_env_uppercase_rejected():
     r = cp.parse("mate apply DEV-EU")
     assert r["is_command"] and not r["valid"]
+
+
+def test_earlier_mate_prefixed_chatter_does_not_block_later_valid_command():
+    # A prior mate-prefixed line that isn't a recognized command (unknown verb)
+    # must not win over a later line that is a full, valid command.
+    r = cp.parse("mate is great\nmate apply dev-eu")
+    assert r == {
+        "is_command": True,
+        "valid": True,
+        "verb": "apply",
+        "env": "dev-eu",
+        "tag_filter": None,
+        "error": None,
+    }
+
+
+def test_pure_garbage_mate_line_still_errors():
+    r = cp.parse("mate is great")
+    assert r["is_command"] and not r["valid"] and r["error"]

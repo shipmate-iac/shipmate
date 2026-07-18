@@ -157,7 +157,7 @@ def main():
             f"repos/{repo}/commits/{head}/check-runs?per_page=100",
         ]
     )
-    checks = [json.loads(line) for line in checks_jsonl.splitlines() if line.strip()]
+    checks = ag.parse_jsonl(checks_jsonl.splitlines())
     # Shared with apply-gate: a name is done only if its *latest* run is
     # completed with a good conclusion — not merely "some run of this name
     # ever completed" (which would wedge on a failed/superseded run).

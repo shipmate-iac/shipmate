@@ -54,6 +54,25 @@ def done_names(check_runs):
     return {name for name, run in latest_by_name(check_runs).items() if _is_done(run)}
 
 
+def parse_jsonl(lines):
+    """Parse newline-delimited JSON (one object per line, blank lines
+    skipped), as emitted by `gh api --paginate --jq`. A malformed line raises
+    SystemExit naming the offending line (truncated) instead of letting a raw
+    json.JSONDecodeError traceback obscure which line was bad. Shared by this
+    script's stdin parsing and by deploy-detect / apply-detect's check-runs
+    parsing."""
+    out = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            out.append(json.loads(line))
+        except json.JSONDecodeError as e:
+            raise SystemExit(f"::error::malformed JSON line ({e}): {line[:120]!r}") from e
+    return out
+
+
 def verdict(check_runs):
     latest = latest_by_name(check_runs)
     if not latest:
@@ -64,7 +83,7 @@ def verdict(check_runs):
 
 
 def main():
-    runs = [json.loads(line) for line in sys.stdin if line.strip()]
+    runs = parse_jsonl(sys.stdin)
     v = verdict(runs)
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
         fh.write(f"verdict={v}\n")

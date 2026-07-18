@@ -44,6 +44,17 @@ def test_assign_waves_preserves_transitive_order_with_empty_middle():
     assert waves[3] == [{"stack": "stacks/app", "environment": "dev-eu", "workload": "app"}]
 
 
+def test_main_treats_set_but_empty_workset_as_empty_list(monkeypatch, tmp_path):
+    monkeypatch.setenv("SHIPMATE_WORKSET", "")
+    out_file = tmp_path / "gh_output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(out_file))
+    import io
+
+    monkeypatch.setattr("sys.stdin", io.StringIO(FIXTURE))
+    w.main([])  # must not raise json.JSONDecodeError on an empty-string env
+    assert "empty=true" in out_file.read_text()
+
+
 def test_assign_waves_cross_env_edge_same_wave_index():
     # dns@dev-us must be an earlier wave than platform@dev-eu (cross-env edge).
     deps = w.parse_dot(FIXTURE)
