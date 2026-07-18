@@ -30,7 +30,7 @@ def _is_recognized_command(line):
 
 
 def parse(body):
-    """Return the parse result dict (see plan Interfaces). Never raises."""
+    """Return the parse result dict. Never raises."""
     result = {
         "is_command": False,
         "valid": False,
