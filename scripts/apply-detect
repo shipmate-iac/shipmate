@@ -64,6 +64,37 @@ def filter_pending(cells, completed_names):
     return [c for c in cells if f"apply / {c['environment']} / {c['stack']}" not in completed_names]
 
 
+# Shared with deploy-detect's `_gh_json`: gh api -> json.loads through bm._run
+# so error handling (nonzero exit -> ::error::) has a single definition.
+def _gh_json(path):
+    return json.loads(bm._run(["gh", "api", path]))
+
+
+def verify_plan_run(repo, run_id, head_sha):
+    """Provenance gate for a dispatched apply: comment-ops' `authorize` already
+    binds head<->run on the comment path, but a direct `workflow_dispatch` (or a
+    hand-edited one) skips that binding entirely. This check is therefore the
+    trust boundary for dispatched applies -- without it, a mismatched
+    run/head pair would apply another run's reviewed plans and green-tick the
+    wrong PR's checks."""
+    run = _gh_json(f"repos/{repo}/actions/runs/{run_id}")
+    if run.get("head_sha") != head_sha:
+        raise SystemExit(
+            f"::error::plan run {run_id} head_sha mismatch: expected {head_sha}, "
+            f"got {run.get('head_sha')}"
+        )
+    if run.get("conclusion") != "success":
+        raise SystemExit(
+            f"::error::plan run {run_id} conclusion is {run.get('conclusion')!r}, "
+            "expected 'success'"
+        )
+    path = run.get("path") or ""
+    if not path.endswith("preview.yml"):
+        raise SystemExit(
+            f"::error::plan run {run_id} is not a preview.yml run: workflow path is {path!r}"
+        )
+
+
 def _artifact_names(repo, run_id):
     data = bm._run(
         [
@@ -83,6 +114,8 @@ def main():
     env = os.environ["SHIPMATE_ENV"]
     plan_run_id = os.environ["SHIPMATE_PLAN_RUN_ID"]
     head = os.environ["SHIPMATE_HEAD_SHA"]
+
+    verify_plan_run(repo, plan_run_id, head)
 
     graph = bm._run(["terramate", "experimental", "run-graph", "--label", "stack.dir"])
     deps = wv.parse_dot(graph)

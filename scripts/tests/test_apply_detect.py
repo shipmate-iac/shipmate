@@ -78,6 +78,61 @@ def test_completed_failure_apply_stays_pending():
     assert ad.filter_pending(cells, done) == cells
 
 
+def test_verify_plan_run_rejects_mismatched_head_sha(monkeypatch):
+    monkeypatch.setattr(
+        ad,
+        "_gh_json",
+        lambda path: {
+            "head_sha": "aaa",
+            "conclusion": "success",
+            "path": ".github/workflows/preview.yml",
+        },
+    )
+    with pytest.raises(SystemExit):
+        ad.verify_plan_run("o/r", "123", "bbb")
+
+
+def test_verify_plan_run_rejects_non_success_conclusion(monkeypatch):
+    monkeypatch.setattr(
+        ad,
+        "_gh_json",
+        lambda path: {
+            "head_sha": "bbb",
+            "conclusion": "failure",
+            "path": ".github/workflows/preview.yml",
+        },
+    )
+    with pytest.raises(SystemExit):
+        ad.verify_plan_run("o/r", "123", "bbb")
+
+
+def test_verify_plan_run_rejects_wrong_workflow_path(monkeypatch):
+    monkeypatch.setattr(
+        ad,
+        "_gh_json",
+        lambda path: {
+            "head_sha": "bbb",
+            "conclusion": "success",
+            "path": ".github/workflows/deploy.yml",
+        },
+    )
+    with pytest.raises(SystemExit):
+        ad.verify_plan_run("o/r", "123", "bbb")
+
+
+def test_verify_plan_run_passes_when_all_match(monkeypatch):
+    monkeypatch.setattr(
+        ad,
+        "_gh_json",
+        lambda path: {
+            "head_sha": "bbb",
+            "conclusion": "success",
+            "path": ".github/workflows/preview.yml",
+        },
+    )
+    ad.verify_plan_run("o/r", "123", "bbb")  # must not raise
+
+
 def test_duplicate_run_newer_queued_stays_pending():
     # An old completed+success run must not mask a newer queued run of the same
     # check name — the latest run per name governs.
