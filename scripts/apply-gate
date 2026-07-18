@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+"""Decide whether every `apply / <env> / <stack>` check on a commit is done.
+
+Reads check-runs as JSON Lines on stdin (one check-run object per line, as
+emitted by `gh api --paginate ... --jq '.check_runs[]'`) and writes a single
+verdict to GITHUB_OUTPUT:
+
+- `complete`   — every apply check's latest run is completed with a good
+                 conclusion (success, or neutral for no-change cells); the
+                 caller may complete the `shipmate / checkmate` gate.
+- `pending`    — at least one apply check is still open, failed, or was
+                 cancelled; the caller must leave the gate untouched.
+- `no-applies` — the commit has no apply checks at all (nothing to gate on);
+                 the caller must leave the gate untouched.
+
+The GitHub API returns every historical run of a re-created check name, so
+runs are grouped by name and judged by the newest run per name, ordered by
+(started_at, id).
+"""
+
+import json
+import os
+import sys
+
+APPLY_PREFIX = "apply / "
+DONE_CONCLUSIONS = {"success", "neutral"}
+
+
+def verdict(check_runs):
+    latest = {}
+    for run in check_runs:
+        name = run["name"]
+        if not name.startswith(APPLY_PREFIX):
+            continue
+        key = (run.get("started_at") or "", run.get("id") or 0)
+        if name not in latest or key > latest[name][0]:
+            latest[name] = (key, run)
+    if not latest:
+        return "no-applies"
+    for _, run in latest.values():
+        if run["status"] != "completed" or run.get("conclusion") not in DONE_CONCLUSIONS:
+            return "pending"
+    return "complete"
+
+
+def main():
+    runs = [json.loads(line) for line in sys.stdin if line.strip()]
+    v = verdict(runs)
+    with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+        fh.write(f"verdict={v}\n")
+
+
+if __name__ == "__main__":
+    main()

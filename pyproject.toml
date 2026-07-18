@@ -26,6 +26,7 @@ line-length = 100
 # list them explicitly.
 extend-include = [
     "scripts/apply-detect",
+    "scripts/apply-gate",
     "scripts/authorize",
     "scripts/build-matrix",
     "scripts/comment-parse",

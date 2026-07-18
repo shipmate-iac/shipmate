@@ -1,0 +1,45 @@
+name: shipmate checkmate-refresh
+description: Complete the shipmate / checkmate gate on a PR head once every apply check is done (pre-merge applies).
+inputs:
+  head-sha:
+    description: PR head SHA carrying the apply checks and the checkmate gate.
+    required: true
+  github-token:
+    description: 'GITHUB_TOKEN with checks:write.'
+    required: true
+outputs:
+  verdict: { description: "complete, pending, or no-applies", value: "${{ steps.scan.outputs.verdict }}" }
+runs:
+  using: composite
+  steps:
+    - name: Scan apply checks on the head commit
+      id: scan
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        HEAD_SHA: ${{ inputs.head-sha }}
+      # filter=all: a re-created check name keeps its historical runs; apply-gate
+      # groups by name and judges the newest run per name.
+      run: |
+        set -euo pipefail
+        gh api --paginate \
+          "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/check-runs?filter=all&per_page=100" \
+          --jq '.check_runs[] | {name, status, conclusion, started_at, id}' \
+          | python3 "$GITHUB_ACTION_PATH/../../scripts/apply-gate"
+    - name: Complete checkmate
+      if: ${{ steps.scan.outputs.verdict == 'complete' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        HEAD_SHA: ${{ inputs.head-sha }}
+      run: |
+        set -euo pipefail
+        python3 - "$HEAD_SHA" > gate.json <<'PY'
+        import json, sys
+        print(json.dumps({"name": "shipmate / checkmate", "head_sha": sys.argv[1],
+            "status": "completed", "conclusion": "success",
+            "output": {"title": "all applies complete",
+                       "summary": "Every apply / <env> / <stack> check for this "
+                                  "commit is complete. Nothing left to apply."}}))
+        PY
+        gh api "repos/$GITHUB_REPOSITORY/check-runs" --input gate.json >/dev/null
