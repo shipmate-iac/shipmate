@@ -32,6 +32,17 @@ Branch protection rules should require `shipmate / checkmate`, not the
 individual per-unit checks, so that the set of required checks does not
 need to be edited every time a stack or environment is added or removed.
 
+`shipmate / checkmate` is created (and refreshed on every preview) by the
+`summary` action, and is completed to success by whichever of these happens
+first:
+
+- the pre-merge apply path (`checkmate-refresh`, called from the apply
+  workflow's summary job) once **every** `apply / <env> / <stack>` check on
+  the PR head is complete — a targeted `mate apply <env>` of only some
+  environments leaves the gate pending;
+- the post-merge deploy, which completes the gate on the merged PR's head
+  SHA after its env-level applies finish.
+
 ## Env model
 
 - One GitHub Environment exists per logical environment (for example,
