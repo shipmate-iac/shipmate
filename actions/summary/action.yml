@@ -69,7 +69,7 @@ runs:
         # --paginate evaluates --jq per page, so a marker match on >1 page emits
         # multiple ids; head -n1 keeps the single id the PATCH URL needs.
         id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
-               --jq "map(select(.body | contains(\"$marker\"))) | .[0].id // empty" | head -n1)
+               --jq "map(select((.body | contains(\"$marker\")) and .user.login == \"github-actions[bot]\")) | .[0].id // empty" | head -n1)
         if [ -n "$id" ]; then
           gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@comment.md >/dev/null
         else

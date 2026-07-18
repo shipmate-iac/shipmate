@@ -31,7 +31,10 @@ runs:
       # Author-controlled $STACK via env (never interpolated) — injection-safe.
       env:
         STACK: ${{ inputs.stack }}
-      run: echo "slug=$(printf '%s' "$STACK" | tr / -)" >> "$GITHUB_OUTPUT"
+      run: |
+        slug=$(printf '%s' "$STACK" | tr / -)
+        [[ "$slug" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::stack path produced invalid slug"; exit 1; }
+        echo "slug=$slug" >> "$GITHUB_OUTPUT"
 
     - name: Download reviewed plan artifact (fail-safe if missing)
       shell: bash

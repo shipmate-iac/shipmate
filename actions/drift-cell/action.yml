@@ -29,7 +29,10 @@ runs:
       # Author-controlled $STACK via env (never interpolated) — injection-safe.
       env:
         STACK: ${{ inputs.stack }}
-      run: echo "slug=$(printf '%s' "$STACK" | tr / -)" >> "$GITHUB_OUTPUT"
+      run: |
+        slug=$(printf '%s' "$STACK" | tr / -)
+        [[ "$slug" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::stack path produced invalid slug"; exit 1; }
+        echo "slug=$slug" >> "$GITHUB_OUTPUT"
 
     - name: Restore state
       uses: ship-iac/shipmate/actions/state@fe5839319aa2fcec472e6f68d97ca8a603e54ba5 # pinned to a commit on main
@@ -96,4 +99,4 @@ runs:
         import json, os
         print(json.dumps({"text": f":ocean: drift detected: {os.environ['ENV']} / {os.environ['STACK_NAME']}"}))
         PY
-        curl -sS -X POST -H 'Content-Type: application/json' --data @payload.json "$SLACK" >/dev/null
+        curl -sS --fail-with-body -X POST -H 'Content-Type: application/json' --data @payload.json "$SLACK" >/dev/null
