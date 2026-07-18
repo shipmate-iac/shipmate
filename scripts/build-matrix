@@ -65,7 +65,9 @@ def _list_stacks(all_stacks, base):
 
 
 def _tags(stack):
-    out = _run(["terramate", "-C", stack, "experimental", "eval", "terramate.stack.tags"])
+    out = _run(
+        ["terramate", "-C", stack, "experimental", "eval", "--as-json", "terramate.stack.tags"]
+    )
     return json.loads(out)
 
 

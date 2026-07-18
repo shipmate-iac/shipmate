@@ -26,7 +26,10 @@ APPLY_PREFIX = "apply / "
 DONE_CONCLUSIONS = {"success", "neutral"}
 
 
-def verdict(check_runs):
+def latest_by_name(check_runs):
+    """Group `apply / <env> / <stack>` check-runs by name, keeping only the
+    newest run per name (ordered by (started_at, id), matching the module
+    docstring). Non-apply check-runs are dropped. Returns {name: run}."""
     latest = {}
     for run in check_runs:
         name = run["name"]
@@ -35,16 +38,52 @@ def verdict(check_runs):
         key = (run.get("started_at") or "", run.get("id") or 0)
         if name not in latest or key > latest[name][0]:
             latest[name] = (key, run)
+    return {name: run for name, (_, run) in latest.items()}
+
+
+def _is_done(run):
+    return run["status"] == "completed" and run.get("conclusion") in DONE_CONCLUSIONS
+
+
+def done_names(check_runs):
+    """Names whose *latest* run is completed with a good conclusion (success,
+    or neutral for no-change cells). This is the single done-predicate shared
+    with deploy-detect / apply-detect so a "completed" status with a bad
+    conclusion, or a stale completed run superseded by a newer pending one,
+    is never mistaken for done."""
+    return {name for name, run in latest_by_name(check_runs).items() if _is_done(run)}
+
+
+def parse_jsonl(lines):
+    """Parse newline-delimited JSON (one object per line, blank lines
+    skipped), as emitted by `gh api --paginate --jq`. A malformed line raises
+    SystemExit naming the offending line (truncated) instead of letting a raw
+    json.JSONDecodeError traceback obscure which line was bad. Shared by this
+    script's stdin parsing and by deploy-detect / apply-detect's check-runs
+    parsing."""
+    out = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            out.append(json.loads(line))
+        except json.JSONDecodeError as e:
+            raise SystemExit(f"::error::malformed JSON line ({e}): {line[:120]!r}") from e
+    return out
+
+
+def verdict(check_runs):
+    latest = latest_by_name(check_runs)
     if not latest:
         return "no-applies"
-    for _, run in latest.values():
-        if run["status"] != "completed" or run.get("conclusion") not in DONE_CONCLUSIONS:
-            return "pending"
-    return "complete"
+    if all(_is_done(run) for run in latest.values()):
+        return "complete"
+    return "pending"
 
 
 def main():
-    runs = [json.loads(line) for line in sys.stdin if line.strip()]
+    runs = parse_jsonl(sys.stdin)
     v = verdict(runs)
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
         fh.write(f"verdict={v}\n")

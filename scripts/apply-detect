@@ -16,10 +16,14 @@ import importlib.util
 import json
 import os
 import pathlib
+import re
 from graphlib import CycleError
 from importlib.machinery import SourceFileLoader
 
 _D = pathlib.Path(__file__).resolve().parent
+
+_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_RUN_ID_RE = re.compile(r"^[0-9]+$")
 
 
 def _load(fname):
@@ -32,6 +36,7 @@ def _load(fname):
 
 bm = _load("build-matrix")
 wv = _load("waves")
+ag = _load("apply-gate")
 
 
 def _slug(path):
@@ -63,6 +68,37 @@ def filter_pending(cells, completed_names):
     return [c for c in cells if f"apply / {c['environment']} / {c['stack']}" not in completed_names]
 
 
+# Shared with deploy-detect's `_gh_json`: gh api -> json.loads through bm._run
+# so error handling (nonzero exit -> ::error::) has a single definition.
+def _gh_json(path):
+    return json.loads(bm._run(["gh", "api", path]))
+
+
+def verify_plan_run(repo, run_id, head_sha):
+    """Provenance gate for a dispatched apply: comment-ops' `authorize` already
+    binds head<->run on the comment path, but a direct `workflow_dispatch` (or a
+    hand-edited one) skips that binding entirely. This check is therefore the
+    trust boundary for dispatched applies -- without it, a mismatched
+    run/head pair would apply another run's reviewed plans and green-tick the
+    wrong PR's checks."""
+    run = _gh_json(f"repos/{repo}/actions/runs/{run_id}")
+    if run.get("head_sha") != head_sha:
+        raise SystemExit(
+            f"::error::plan run {run_id} head_sha mismatch: expected {head_sha}, "
+            f"got {run.get('head_sha')}"
+        )
+    if run.get("conclusion") != "success":
+        raise SystemExit(
+            f"::error::plan run {run_id} conclusion is {run.get('conclusion')!r}, "
+            "expected 'success'"
+        )
+    path = run.get("path") or ""
+    if not path.endswith("/preview.yml"):
+        raise SystemExit(
+            f"::error::plan run {run_id} is not a preview.yml run: workflow path is {path!r}"
+        )
+
+
 def _artifact_names(repo, run_id):
     data = bm._run(
         [
@@ -77,11 +113,32 @@ def _artifact_names(repo, run_id):
     return [ln.strip() for ln in data.splitlines() if ln.strip()]
 
 
+def validate_head_sha(value):
+    """Guard against a malformed SHIPMATE_HEAD_SHA retargeting the gh api URLs
+    built from it (e.g. `/`, `?`, `..`). Safe to echo — not a secret."""
+    if not _SHA_RE.fullmatch(value):
+        raise SystemExit(
+            f"::error::SHIPMATE_HEAD_SHA must be a 40-char lowercase hex SHA (got: {value!r})"
+        )
+
+
+def validate_plan_run_id(value):
+    """Guard against a malformed SHIPMATE_PLAN_RUN_ID retargeting the gh api URLs
+    built from it. Safe to echo — not a secret."""
+    if not _RUN_ID_RE.fullmatch(value):
+        raise SystemExit(f"::error::SHIPMATE_PLAN_RUN_ID must be a numeric run id (got: {value!r})")
+
+
 def main():
     repo = os.environ["GITHUB_REPOSITORY"]
     env = os.environ["SHIPMATE_ENV"]
     plan_run_id = os.environ["SHIPMATE_PLAN_RUN_ID"]
     head = os.environ["SHIPMATE_HEAD_SHA"]
+
+    validate_head_sha(head)
+    validate_plan_run_id(plan_run_id)
+
+    verify_plan_run(repo, plan_run_id, head)
 
     graph = bm._run(["terramate", "experimental", "run-graph", "--label", "stack.dir"])
     deps = wv.parse_dot(graph)
@@ -100,10 +157,11 @@ def main():
             f"repos/{repo}/commits/{head}/check-runs?per_page=100",
         ]
     )
-    checks = [json.loads(line) for line in checks_jsonl.splitlines() if line.strip()]
-    completed = {
-        c["name"] for c in checks if c["name"].startswith("apply / ") and c["status"] == "completed"
-    }
+    checks = ag.parse_jsonl(checks_jsonl.splitlines())
+    # Shared with apply-gate: a name is done only if its *latest* run is
+    # completed with a good conclusion — not merely "some run of this name
+    # ever completed" (which would wedge on a failed/superseded run).
+    completed = ag.done_names(checks)
     pending = filter_pending(cells, completed)
 
     waves = wv.assign_waves(wv.levels(deps), pending)

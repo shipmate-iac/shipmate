@@ -31,7 +31,10 @@ runs:
       # Author-controlled $STACK via env (never interpolated) — injection-safe.
       env:
         STACK: ${{ inputs.stack }}
-      run: echo "slug=$(printf '%s' "$STACK" | tr / -)" >> "$GITHUB_OUTPUT"
+      run: |
+        slug=$(printf '%s' "$STACK" | tr / -)
+        [[ "$slug" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::stack path produced invalid slug"; exit 1; }
+        echo "slug=$slug" >> "$GITHUB_OUTPUT"
 
     - name: Download reviewed plan artifact (fail-safe if missing)
       shell: bash
@@ -47,6 +50,7 @@ runs:
           echo "::error::no successful preview run for this head SHA — no reviewed plan to apply for $ENV/$STACK_NAME. Re-run preview."
           exit 1
         fi
+        [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "::error::preview-run-id must be numeric (got: $RUN_ID)"; exit 1; }
         echo "::group::download reviewed plan: $ART"
         if ! gh run download "$RUN_ID" -n "$ART" -D . ; then
           echo "::endgroup::"
@@ -76,6 +80,7 @@ runs:
         fi
 
     - name: Restore state
+      id: restore-state
       uses: ship-iac/shipmate/actions/state@fe5839319aa2fcec472e6f68d97ca8a603e54ba5 # pinned to a commit on main
       with:
         stack-slug: ${{ steps.ids.outputs.slug }}
@@ -97,6 +102,13 @@ runs:
         echo "::endgroup::"
 
     - name: Save state
+      # Persist state whenever the apply was attempted (restore succeeded), not
+      # only on a clean apply: a partial `tofu apply` failure still mutates
+      # local state per-resource, and dropping it would orphan resources on
+      # the next run's restore-then-retry. Guard on restore's outcome so we
+      # never save a state that was never actually restored (e.g. this step
+      # itself failed) and skip entirely on cancellation.
+      if: ${{ !cancelled() && steps.restore-state.outcome == 'success' }}
       uses: ship-iac/shipmate/actions/state@fe5839319aa2fcec472e6f68d97ca8a603e54ba5 # pinned to a commit on main
       with:
         stack-slug: ${{ steps.ids.outputs.slug }}
@@ -113,6 +125,7 @@ runs:
         HEAD_SHA: ${{ inputs.head-sha }}
       run: |
         set -euo pipefail
+        [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::head-sha must be a 40-char lowercase hex SHA (got: $HEAD_SHA)"; exit 1; }
         # Check-runs are paginated (a 256-cell PR yields >100); stream them all.
         gh api --paginate --jq '.check_runs[]' "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/check-runs?per_page=100" > checks.jsonl
         # Author-controlled ENV/STACK pass via env; JSON handled in python. The
