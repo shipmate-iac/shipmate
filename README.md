@@ -134,9 +134,9 @@ Three sample repos exercise shipmate end to end against local state with **zero
 cloud credentials**, one per common IaC layout — the best place to see the
 workflows wired up:
 
-- [repo-example-stacks](https://github.com/shipmate-iac/repo-example-stacks) — DRY / dynamic-backend (`TF_VAR_env` / `TF_VAR_region`)
-- [repo-example-folders](https://github.com/shipmate-iac/repo-example-folders) — folder-per-env/region (no injected vars)
-- [repo-example-workspaces](https://github.com/shipmate-iac/repo-example-workspaces) — workspace-per-env (`TF_WORKSPACE`)
+- [repo-example-stacks](https://github.com/ship-iac/repo-example-stacks) — DRY / dynamic-backend (`TF_VAR_env` / `TF_VAR_region`)
+- [repo-example-folders](https://github.com/ship-iac/repo-example-folders) — folder-per-env/region (no injected vars)
+- [repo-example-workspaces](https://github.com/ship-iac/repo-example-workspaces) — workspace-per-env (`TF_WORKSPACE`)
 
 ## Development
 
