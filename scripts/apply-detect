@@ -32,6 +32,7 @@ def _load(fname):
 
 bm = _load("build-matrix")
 wv = _load("waves")
+ag = _load("apply-gate")
 
 
 def _slug(path):
@@ -101,9 +102,10 @@ def main():
         ]
     )
     checks = [json.loads(line) for line in checks_jsonl.splitlines() if line.strip()]
-    completed = {
-        c["name"] for c in checks if c["name"].startswith("apply / ") and c["status"] == "completed"
-    }
+    # Shared with apply-gate: a name is done only if its *latest* run is
+    # completed with a good conclusion — not merely "some run of this name
+    # ever completed" (which would wedge on a failed/superseded run).
+    completed = ag.done_names(checks)
     pending = filter_pending(cells, completed)
 
     waves = wv.assign_waves(wv.levels(deps), pending)

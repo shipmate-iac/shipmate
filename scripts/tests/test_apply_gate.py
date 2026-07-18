@@ -118,3 +118,41 @@ def test_no_apply_checks_at_all():
 def test_cancelled_apply_stays_pending():
     runs = [_run("apply / dev-eu / stacks/app", "completed", "cancelled")]
     assert ag.verdict(runs) == "pending"
+
+
+def test_done_names_excludes_completed_failure():
+    runs = [_run("apply / dev-eu / stacks/app", "completed", "failure")]
+    assert ag.done_names(runs) == set()
+
+
+def test_done_names_includes_completed_success_and_neutral():
+    runs = [
+        _run("apply / dev-eu / stacks/app", "completed", "success"),
+        _run("apply / dev-us / stacks/app", "completed", "neutral"),
+    ]
+    assert ag.done_names(runs) == {"apply / dev-eu / stacks/app", "apply / dev-us / stacks/app"}
+
+
+def test_done_names_uses_latest_run_per_name():
+    runs = [
+        _run(
+            "apply / dev-eu / stacks/app",
+            "completed",
+            "success",
+            started_at="2026-07-18T10:00:00Z",
+            run_id=1,
+        ),
+        _run(
+            "apply / dev-eu / stacks/app",
+            "queued",
+            None,
+            started_at="2026-07-18T11:00:00Z",
+            run_id=2,
+        ),
+    ]
+    assert ag.done_names(runs) == set()
+
+
+def test_latest_by_name_ignores_non_apply_checks():
+    runs = [_run("plan / dev-eu / stacks/app", "completed", "success")]
+    assert ag.latest_by_name(runs) == {}

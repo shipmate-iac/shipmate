@@ -25,6 +25,48 @@ def test_filter_pending_keeps_all_when_none_completed():
     assert dd.filter_pending(cells, set()) == cells
 
 
+def test_completed_failure_apply_stays_pending():
+    # A "completed" status with a failing conclusion must not count as done —
+    # deploy-detect must share apply-gate's success/neutral predicate, not just
+    # check status=="completed".
+    cells = [{"stack": "stacks/app", "environment": "dev-eu", "workload": ""}]
+    checks = [
+        {
+            "name": "apply / dev-eu / stacks/app",
+            "status": "completed",
+            "conclusion": "failure",
+            "started_at": "2026-07-18T10:00:00Z",
+            "id": 1,
+        },
+    ]
+    done = dd.ag.done_names(checks)
+    assert dd.filter_pending(cells, done) == cells
+
+
+def test_duplicate_run_newer_queued_stays_pending():
+    # An old completed+success run must not mask a newer queued run of the same
+    # check name (re-created check) — the latest run per name governs.
+    cells = [{"stack": "stacks/app", "environment": "dev-eu", "workload": ""}]
+    checks = [
+        {
+            "name": "apply / dev-eu / stacks/app",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-07-18T10:00:00Z",
+            "id": 1,
+        },
+        {
+            "name": "apply / dev-eu / stacks/app",
+            "status": "queued",
+            "conclusion": None,
+            "started_at": "2026-07-18T11:00:00Z",
+            "id": 2,
+        },
+    ]
+    done = dd.ag.done_names(checks)
+    assert dd.filter_pending(cells, done) == cells
+
+
 def test_waves_by_env_level_buckets_and_orders():
     pending = [
         {"stack": "stacks/dns", "environment": "dev-eu"},

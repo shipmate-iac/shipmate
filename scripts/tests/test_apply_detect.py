@@ -59,3 +59,44 @@ def test_filter_pending_drops_completed():
     completed = {"apply / dev-eu / stacks/dns"}
     kept = ad.filter_pending(cells, completed)
     assert [c["stack"] for c in kept] == ["stacks/app"]
+
+
+def test_completed_failure_apply_stays_pending():
+    # "completed" status with a failing conclusion must not count as done —
+    # apply-detect must share apply-gate's success/neutral predicate.
+    cells = [{"stack": "stacks/app", "environment": "dev-eu"}]
+    checks = [
+        {
+            "name": "apply / dev-eu / stacks/app",
+            "status": "completed",
+            "conclusion": "failure",
+            "started_at": "2026-07-18T10:00:00Z",
+            "id": 1,
+        },
+    ]
+    done = ad.ag.done_names(checks)
+    assert ad.filter_pending(cells, done) == cells
+
+
+def test_duplicate_run_newer_queued_stays_pending():
+    # An old completed+success run must not mask a newer queued run of the same
+    # check name — the latest run per name governs.
+    cells = [{"stack": "stacks/app", "environment": "dev-eu"}]
+    checks = [
+        {
+            "name": "apply / dev-eu / stacks/app",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-07-18T10:00:00Z",
+            "id": 1,
+        },
+        {
+            "name": "apply / dev-eu / stacks/app",
+            "status": "queued",
+            "conclusion": None,
+            "started_at": "2026-07-18T11:00:00Z",
+            "id": 2,
+        },
+    ]
+    done = ad.ag.done_names(checks)
+    assert ad.filter_pending(cells, done) == cells

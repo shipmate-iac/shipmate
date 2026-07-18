@@ -20,6 +20,11 @@ runs:
         HEAD_SHA: ${{ inputs.head-sha }}
       # filter=all: a re-created check name keeps its historical runs; apply-gate
       # groups by name and judges the newest run per name.
+      # Known narrow race (documented limitation, fix deferred): a preview
+      # re-run mid-apply can create a fresh queued duplicate of an apply
+      # check whose earlier run is already applying; apply-cell's PATCH
+      # completes all matching ids for that name, so the fresh duplicate
+      # also gets marked complete even though nothing applied it.
       run: |
         set -euo pipefail
         gh api --paginate \
