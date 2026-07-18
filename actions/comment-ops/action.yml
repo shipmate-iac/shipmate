@@ -82,6 +82,7 @@ runs:
         private-key: ${{ inputs.private-key }}
         owner: ${{ github.repository_owner }}
         repositories: ${{ github.event.repository.name }}
+        permission-members: read
 
     - name: App token unavailable (App not installed?)
       if: ${{ steps.parse.outputs.valid == 'true' && steps.apptoken.outcome != 'success' }}
