@@ -172,6 +172,62 @@ def test_parse_jsonl_malformed_line_raises_systemexit_naming_line():
     assert "not-json-garbage" in str(exc_info.value)
 
 
+def test_latest_by_name_handles_missing_started_at_key():
+    # A run missing the 'started_at' key entirely (not merely None/"") must
+    # not KeyError -- a refactor from `run.get("started_at") or ""` to plain
+    # `run["started_at"]` must fail this test.
+    runs = [
+        {
+            "name": "apply / dev-eu / stacks/app",
+            "status": "completed",
+            "conclusion": "success",
+            "id": 1,
+        },
+    ]
+    latest = ag.latest_by_name(runs)
+    assert latest["apply / dev-eu / stacks/app"]["id"] == 1
+
+
+def test_latest_by_name_handles_missing_id_key():
+    # A run missing the 'id' key entirely must not KeyError -- a refactor from
+    # `run.get("id") or 0` to plain `run["id"]` must fail this test.
+    runs = [
+        {
+            "name": "apply / dev-eu / stacks/app",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-07-18T10:00:00Z",
+        },
+    ]
+    latest = ag.latest_by_name(runs)
+    assert latest["apply / dev-eu / stacks/app"]["started_at"] == "2026-07-18T10:00:00Z"
+
+
+def test_latest_by_name_missing_started_at_sorts_as_earliest():
+    # A run with no started_at key at all falls back to "" (sorts before any
+    # real ISO timestamp), so a later real run must still win as "latest".
+    missing_started_at = {
+        "name": "apply / dev-eu / stacks/app",
+        "status": "queued",
+        "conclusion": None,
+        "id": 1,
+    }
+    real_started_at = {
+        "name": "apply / dev-eu / stacks/app",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-07-18T10:00:00Z",
+        "id": 2,
+    }
+    latest = ag.latest_by_name([missing_started_at, real_started_at])
+    assert latest["apply / dev-eu / stacks/app"]["id"] == 2
+
+
+def test_verdict_does_not_crash_on_runs_missing_started_at_and_id():
+    runs = [{"name": "apply / dev-eu / stacks/app", "status": "completed", "conclusion": "success"}]
+    assert ag.verdict(runs) == "complete"
+
+
 def test_parse_jsonl_truncates_long_offending_line():
     long_garbage = "x" * 500
     with pytest.raises(SystemExit) as exc_info:

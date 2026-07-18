@@ -146,6 +146,51 @@ def test_merged_head_no_pulls_returns_merge_sha(monkeypatch):
     assert dd._merged_head("o/r", "merge123", _attempts=1, _sleep=0) == "merge123"
 
 
+def test_merged_head_retries_until_pulls_populated(monkeypatch):
+    # commits/{sha}/pulls can transiently return [] for a few seconds after the
+    # push (association indexing lag) -- must retry rather than giving up on
+    # the first empty response.
+    responses = [
+        [],
+        [],
+        [
+            {
+                "merge_commit_sha": "merge123",
+                "merged_at": "2024-01-01T00:00:00Z",
+                "head": {"sha": "right"},
+            }
+        ],
+    ]
+    calls = {"n": 0}
+
+    def fake_gh_json(path):
+        result = responses[calls["n"]]
+        calls["n"] += 1
+        return result
+
+    slept = []
+    monkeypatch.setattr(dd, "_gh_json", fake_gh_json)
+    monkeypatch.setattr(dd.time, "sleep", lambda s: slept.append(s))
+    assert dd._merged_head("o/r", "merge123", _attempts=5, _sleep=2) == "right"
+    assert calls["n"] == 3
+    assert slept == [2, 2]  # slept before the 2nd and 3rd attempts only
+
+
+def test_merged_head_gives_up_after_attempts_exhausted_all_empty(monkeypatch):
+    # If every attempt returns [] the retry loop must stop at _attempts and
+    # fall back to the merge SHA, not loop forever or raise.
+    calls = {"n": 0}
+
+    def fake_gh_json(path):
+        calls["n"] += 1
+        return []
+
+    monkeypatch.setattr(dd, "_gh_json", fake_gh_json)
+    monkeypatch.setattr(dd.time, "sleep", lambda s: None)
+    assert dd._merged_head("o/r", "merge123", _attempts=3, _sleep=0) == "merge123"
+    assert calls["n"] == 3
+
+
 def test_check_runs_jsonl_parsing_reuses_apply_gates_parse_jsonl():
     # deploy-detect's check-runs JSONL parsing must not roll its own
     # json.loads-per-line loop -- a malformed line should raise SystemExit

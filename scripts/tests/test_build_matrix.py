@@ -71,7 +71,8 @@ def test_tags_evals_with_as_json(monkeypatch):
     ]
 
 
-def test_compute_cells_fans_out_and_guards_untagged(monkeypatch):
+def test_compute_cells_fans_out_multi_env(monkeypatch):
+    # Happy path only -- does NOT exercise the untagged-stack guard.
     monkeypatch.setattr(bm, "_list_stacks", lambda all_stacks, base: ["stacks/app"])
     monkeypatch.setattr(bm, "_tags", lambda s: ["env/dev-eu", "env/dev-us", "workload/app"])
     cells = bm.compute_cells(all_stacks=True)
@@ -79,3 +80,20 @@ def test_compute_cells_fans_out_and_guards_untagged(monkeypatch):
         {"stack": "stacks/app", "environment": "dev-eu", "workload": "app"},
         {"stack": "stacks/app", "environment": "dev-us", "workload": "app"},
     ]
+
+
+def test_compute_cells_raises_on_untagged_stack(monkeypatch):
+    # A stack with no env/* tag would silently vanish from preview/apply/drift
+    # -- compute_cells must fail loud instead (scripts/build-matrix lines ~76-84).
+    monkeypatch.setattr(
+        bm, "_list_stacks", lambda all_stacks, base: ["stacks/app", "stacks/orphan"]
+    )
+    monkeypatch.setattr(
+        bm,
+        "_tags",
+        lambda s: ["env/dev-eu"] if s == "stacks/app" else ["workload/net"],
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        bm.compute_cells(all_stacks=True)
+    assert "stacks/orphan" in str(exc_info.value)
+    assert "stacks/app" not in str(exc_info.value)
