@@ -22,7 +22,7 @@ GitHub App registration via a manifest is a browser POST, not an API call.
 Build a self-submitting HTML form from `app/manifest.json` and open it:
 
 ```bash
-ORG=<your-org>   # e.g. shipmate-iac
+ORG=<your-org>   # e.g. ship-iac
 
 python3 - "$ORG" <<'PY' > /tmp/shipmate-app-manifest.html
 import json, sys

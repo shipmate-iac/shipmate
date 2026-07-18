@@ -36,9 +36,9 @@ pull request.
   never as patch code in a consuming repo.
 
 Runnable end-to-end examples live in the sample repositories:
-[repo-example-stacks](https://github.com/shipmate-iac/repo-example-stacks),
-[repo-example-folders](https://github.com/shipmate-iac/repo-example-folders),
-[repo-example-workspaces](https://github.com/shipmate-iac/repo-example-workspaces).
+[repo-example-stacks](https://github.com/ship-iac/repo-example-stacks),
+[repo-example-folders](https://github.com/ship-iac/repo-example-folders),
+[repo-example-workspaces](https://github.com/ship-iac/repo-example-workspaces).
 
 ## License
 

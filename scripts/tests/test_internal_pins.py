@@ -12,7 +12,7 @@ path once -- ``apply-env-level.yml`` pinned ``apply-cell`` at a pre-safeguard SH
 so the ``--disable-safeguards=git-out-of-sync`` fix never reached post-merge
 applies even after consumers re-pinned to the new engine SHA.
 
-This test asserts every internal ``shipmate-iac/shipmate/<path>@<sha>`` reference
+This test asserts every internal ``ship-iac/shipmate/<path>@<sha>`` reference
 pins a commit whose ``<path>`` content is identical to the current tree. A
 difference means the pin is stale: bump it to a commit that contains the current
 action (in practice, a follow-up commit pinning the just-merged release SHA).
@@ -25,7 +25,7 @@ import subprocess
 import pytest
 
 _ROOT = pathlib.Path(__file__).resolve().parents[2]
-_REF = re.compile(r"shipmate-iac/shipmate/([^@\s]+)@([0-9a-f]{40})")
+_REF = re.compile(r"ship-iac/shipmate/([^@\s]+)@([0-9a-f]{40})")
 
 
 def _self_refs():

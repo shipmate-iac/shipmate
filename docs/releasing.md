@@ -25,7 +25,7 @@ sequence:
 2. In a follow-up commit, bump the internal pins to that SHA:
 
    ```bash
-   grep -rlE 'shipmate-iac/shipmate/actions/(apply-cell|setup|state)@[0-9a-f]{40}' \
+   grep -rlE 'ship-iac/shipmate/actions/(apply-cell|setup|state)@[0-9a-f]{40}' \
      .github/workflows actions \
      | xargs sed -i 's/@<old-sha>/@abc1234.../g'
    ```
@@ -33,7 +33,7 @@ sequence:
 ## The guard
 
 `scripts/tests/test_internal_pins.py` fails CI if any internal
-`shipmate-iac/shipmate/<path>@<sha>` reference pins a commit whose `<path>` no
+`ship-iac/shipmate/<path>@<sha>` reference pins a commit whose `<path>` no
 longer matches the current tree. A red run here after an action change means step
 2 above is still pending. (CI checks out with `fetch-depth: 0` so the test can
 read the pinned commit objects.)
