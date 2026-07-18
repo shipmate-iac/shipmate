@@ -27,6 +27,7 @@ runs:
       # also gets marked complete even though nothing applied it.
       run: |
         set -euo pipefail
+        [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::head-sha must be a 40-char lowercase hex SHA (got: $HEAD_SHA)"; exit 1; }
         gh api --paginate \
           "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/check-runs?filter=all&per_page=100" \
           --jq '.check_runs[] | {name, status, conclusion, started_at, id}' \

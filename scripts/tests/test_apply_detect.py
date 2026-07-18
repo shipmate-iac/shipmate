@@ -137,6 +137,44 @@ def test_verify_plan_run_rejects_lookalike_workflow_name(monkeypatch):
         ad.verify_plan_run("o/r", "123", "bbb")
 
 
+def test_validate_head_sha_rejects_short():
+    with pytest.raises(SystemExit):
+        ad.validate_head_sha("abc123")
+
+
+def test_validate_head_sha_rejects_uppercase():
+    with pytest.raises(SystemExit):
+        ad.validate_head_sha("A" * 40)
+
+
+def test_validate_head_sha_rejects_non_hex():
+    with pytest.raises(SystemExit):
+        ad.validate_head_sha("g" * 40)
+
+
+def test_validate_head_sha_rejects_path_chars():
+    with pytest.raises(SystemExit):
+        ad.validate_head_sha("../../etc/passwd")
+
+
+def test_validate_head_sha_accepts_valid():
+    ad.validate_head_sha("0123456789abcdef0123456789abcdef01234567")  # must not raise
+
+
+def test_validate_plan_run_id_rejects_non_numeric():
+    with pytest.raises(SystemExit):
+        ad.validate_plan_run_id("123/actions/runs/456")
+
+
+def test_validate_plan_run_id_rejects_empty():
+    with pytest.raises(SystemExit):
+        ad.validate_plan_run_id("")
+
+
+def test_validate_plan_run_id_accepts_valid():
+    ad.validate_plan_run_id("123456")  # must not raise
+
+
 def test_verify_plan_run_passes_when_all_match(monkeypatch):
     monkeypatch.setattr(
         ad,

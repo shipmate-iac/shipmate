@@ -16,10 +16,14 @@ import importlib.util
 import json
 import os
 import pathlib
+import re
 from graphlib import CycleError
 from importlib.machinery import SourceFileLoader
 
 _D = pathlib.Path(__file__).resolve().parent
+
+_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_RUN_ID_RE = re.compile(r"^[0-9]+$")
 
 
 def _load(fname):
@@ -109,11 +113,30 @@ def _artifact_names(repo, run_id):
     return [ln.strip() for ln in data.splitlines() if ln.strip()]
 
 
+def validate_head_sha(value):
+    """Guard against a malformed SHIPMATE_HEAD_SHA retargeting the gh api URLs
+    built from it (e.g. `/`, `?`, `..`). Safe to echo — not a secret."""
+    if not _SHA_RE.fullmatch(value):
+        raise SystemExit(
+            f"::error::SHIPMATE_HEAD_SHA must be a 40-char lowercase hex SHA (got: {value!r})"
+        )
+
+
+def validate_plan_run_id(value):
+    """Guard against a malformed SHIPMATE_PLAN_RUN_ID retargeting the gh api URLs
+    built from it. Safe to echo — not a secret."""
+    if not _RUN_ID_RE.fullmatch(value):
+        raise SystemExit(f"::error::SHIPMATE_PLAN_RUN_ID must be a numeric run id (got: {value!r})")
+
+
 def main():
     repo = os.environ["GITHUB_REPOSITORY"]
     env = os.environ["SHIPMATE_ENV"]
     plan_run_id = os.environ["SHIPMATE_PLAN_RUN_ID"]
     head = os.environ["SHIPMATE_HEAD_SHA"]
+
+    validate_head_sha(head)
+    validate_plan_run_id(plan_run_id)
 
     verify_plan_run(repo, plan_run_id, head)
 

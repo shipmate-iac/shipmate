@@ -47,6 +47,7 @@ runs:
           echo "::error::no successful preview run for this head SHA — no reviewed plan to apply for $ENV/$STACK_NAME. Re-run preview."
           exit 1
         fi
+        [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "::error::preview-run-id must be numeric (got: $RUN_ID)"; exit 1; }
         echo "::group::download reviewed plan: $ART"
         if ! gh run download "$RUN_ID" -n "$ART" -D . ; then
           echo "::endgroup::"
@@ -113,6 +114,7 @@ runs:
         HEAD_SHA: ${{ inputs.head-sha }}
       run: |
         set -euo pipefail
+        [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::head-sha must be a 40-char lowercase hex SHA (got: $HEAD_SHA)"; exit 1; }
         # Check-runs are paginated (a 256-cell PR yields >100); stream them all.
         gh api --paginate --jq '.check_runs[]' "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/check-runs?per_page=100" > checks.jsonl
         # Author-controlled ENV/STACK pass via env; JSON handled in python. The
