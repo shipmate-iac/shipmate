@@ -80,6 +80,7 @@ runs:
         fi
 
     - name: Restore state
+      id: restore-state
       uses: ship-iac/shipmate/actions/state@fe5839319aa2fcec472e6f68d97ca8a603e54ba5 # pinned to a commit on main
       with:
         stack-slug: ${{ steps.ids.outputs.slug }}
@@ -101,6 +102,13 @@ runs:
         echo "::endgroup::"
 
     - name: Save state
+      # Persist state whenever the apply was attempted (restore succeeded), not
+      # only on a clean apply: a partial `tofu apply` failure still mutates
+      # local state per-resource, and dropping it would orphan resources on
+      # the next run's restore-then-retry. Guard on restore's outcome so we
+      # never save a state that was never actually restored (e.g. this step
+      # itself failed) and skip entirely on cancellation.
+      if: ${{ !cancelled() && steps.restore-state.outcome == 'success' }}
       uses: ship-iac/shipmate/actions/state@fe5839319aa2fcec472e6f68d97ca8a603e54ba5 # pinned to a commit on main
       with:
         stack-slug: ${{ steps.ids.outputs.slug }}
