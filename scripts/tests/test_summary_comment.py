@@ -220,3 +220,25 @@ def test_load_cells_fails_loud_on_missing_schema_keys(tmp_path):
 
 def test_load_cells_empty_dir_ok(tmp_path):
     assert sc.load_cells(str(tmp_path / "nope")) == []
+
+
+# --- coupling guards ---------------------------------------------------------
+
+_ENGINE = pathlib.Path(__file__).resolve().parents[2]
+
+
+def test_cell_schema_guard_plan_cell_writes_every_required_key():
+    # Coupling: plan-cell (writer of cell.json) <-> summary-comment (reader).
+    # The writer is inline python in the action; assert every key the reader
+    # requires appears as a JSON key literal in the writer's source.
+    src = (_ENGINE / "actions" / "plan-cell" / "action.yml").read_text(encoding="utf-8")
+    missing = [k for k in sc.CELL_KEYS if f'"{k}"' not in src]
+    assert missing == [], f"plan-cell action.yml no longer writes cell.json keys: {missing}"
+
+
+def test_cell_summary_artifact_uploads_plan_text():
+    # summary-comment renders details from plan.txt shipped inside the
+    # cell-summary artifact; the upload step's path block must include it.
+    src = (_ENGINE / "actions" / "plan-cell" / "action.yml").read_text(encoding="utf-8")
+    upload = src.split("Upload cell summary", 1)[1].split("retention-days", 1)[0]
+    assert "plan.txt" in upload

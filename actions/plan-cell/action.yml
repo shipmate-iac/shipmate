@@ -87,6 +87,7 @@ runs:
       # Build via python from env vars so an author-controlled stack-name/env
       # cannot inject shell or break the JSON.
       env:
+        STACK: ${{ inputs.stack }}
         STACK_NAME: ${{ inputs.stack-name }}
         ENV: ${{ inputs.env }}
         ADD: ${{ steps.plan.outputs.add }}
@@ -99,6 +100,7 @@ runs:
         with open("cell.json", "w") as fh:
             json.dump({
                 "stack": os.environ["STACK_NAME"],
+                "stack_path": os.environ["STACK"],
                 "environment": os.environ["ENV"],
                 "add": int(os.environ["ADD"]),
                 "change": int(os.environ["CHANGE"]),
@@ -111,7 +113,9 @@ runs:
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       with:
         name: cell-summary-${{ steps.ids.outputs.slug }}-${{ inputs.env }}
-        path: cell.json
+        path: |
+          cell.json
+          plan.txt
         retention-days: ${{ inputs.retention-days }}
 
     - name: Create apply check (pending / no-changes)
