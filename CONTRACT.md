@@ -153,10 +153,10 @@ It has **no** `checks` permission and **no** `issues` permission — the App
 exists only to mint a `workflow_dispatch` token (events created with the
 default `GITHUB_TOKEN` never trigger other workflows, so a private App is the
 only way to kick off the apply workflow from a comment) and to read team
-membership for authorization. Apply checks are created and completed by
-`apply.yml`'s own `GITHUB_TOKEN` (the shared `github-actions` identity), never
-by the App — check runs are only updatable by the app that created them, and
-every workflow in a repo shares the `github-actions` identity, so keeping
+membership for authorization. Apply checks are created and completed by the
+apply workflows' own `GITHUB_TOKEN` (the shared `github-actions` identity),
+never by the App — check runs are only updatable by the app that created them,
+and every workflow in a repo shares the `github-actions` identity, so keeping
 check writes on `GITHUB_TOKEN` keeps that identity consistent across the
 pre-merge and post-merge paths.
 
