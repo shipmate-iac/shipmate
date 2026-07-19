@@ -110,12 +110,23 @@ when the same stack participates in more than one environment.
 
 ## Comment-ops
 
-`mate <verb> <env> [tag-filter]` in a PR comment drives a manual, pre-merge
+`mate <verb> [env] [tag-filter]` in a PR comment drives a manual, pre-merge
 apply. The grammar is strict and anchored — the whole comment line must match
 one regex, and the parsed values are never interpolated into a shell. `apply`
 is the only active verb; `plan` and `destroy` are reserved (recognized and
 rejected with a "reserved" message) so the grammar does not need to change
 shape when those verbs are implemented.
+
+The env is optional for `apply`. A targeted `mate apply <env>` applies one
+environment; a bare `mate apply` applies **every** environment that has a
+reviewed plan for the current PR head, in `env_order` env-levels (see Env
+apply order, below), **except** environments listed in the Terramate global
+`global.shipmate.explicit_envs`. Explicit environments (typically production)
+must always be named: their `apply / <env> / <stack>` checks simply stay
+pending under a bare apply — so `shipmate / checkmate` keeps gating the
+merge — until someone runs `mate apply <env>` for them. An absent global (or
+`[]`) means a bare apply targets everything. Malformed `explicit_envs` shapes
+(not a list of strings) fail loud, like `env_order`.
 
 A parsed `mate apply <env>` command is authorized only when **all** of the
 following hold, checked in order, each with its own actionable rejection
@@ -129,6 +140,12 @@ reason:
 - a reviewed plan exists for the pull request's **current** head SHA (the
   most recent successful preview run whose head matches; a plan for an older
   head means new commits landed since — stale, re-plan required).
+
+A bare `mate apply` is authorized exactly once, by the same four checks — one
+authorization decision covers the whole multi-environment run. It dispatches
+`apply-all.yml` (the targeted form dispatches `apply.yml`); both share the
+same App-minted `workflow_dispatch` mechanism and the same per-env
+`apply-<env>-<stack>` concurrency groups.
 
 The GitHub App used for comment-ops carries exactly this permission set:
 `actions: write`, `pull_requests: write`, `contents: read`, `members: read`.
@@ -346,11 +363,27 @@ that fails loud rather than silently truncating.
 Targeted applies (`mate apply <env>`) act on a single environment and skip
 env-level ordering entirely — there is nothing to order across.
 
+A bare `mate apply` is the pre-merge equivalent of the merge-deploy path: it
+buckets the pending applies of every non-explicit environment into the same
+env-levels and applies level 0 fully before level 1, with the same
+failure-skips-successor-levels rule. An environment excluded as explicit
+keeps its position in the order: environments that do not depend on it run
+normally at their own level, while environments ordered (transitively) after
+an unapplied explicit environment are skipped with a notice — their ordering
+precondition cannot be met in that run, exactly like a failed predecessor
+level. Completed cells skip idempotently, so re-commenting `mate apply`
+resumes where the previous run stopped.
+
 The engine ships this as a reusable, parameterized workflow
 (`.github/workflows/apply-env-level.yml`) that a consuming repo's `deploy.yml`
 calls once per env-level, passing that level's pre-computed wave matrix; the
 workflow itself still fans applies out stack-wave by stack-wave exactly as
 described above (see Fan-out).
+
+The engine ships the bare-apply path as the dispatched reusable workflow
+`.github/workflows/apply-all.yml` (detect → env-levels 0..3 via
+`apply-env-level.yml` → checkmate refresh + result comment); a consuming
+repo's `apply-all.yml` is a thin `workflow_dispatch` wrapper that calls it.
 
 ## OpenTofu note
 
