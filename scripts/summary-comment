@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+"""Build the sticky preview comment: overview table + per-cell plan details.
+
+Reads `plan / <env> / <stack>` check-runs as JSON Lines on stdin (as emitted
+by `gh api --paginate ... --jq '.check_runs[]'`), cell summaries + rendered
+plan text from the $CELLS directory (cell-summary-* artifacts), and writes
+comment.md plus pending/count to GITHUB_OUTPUT.
+
+GitHub rejects issue-comment bodies over 65,536 characters. SIZE_BUDGET
+leaves headroom below that cap; each changed cell's details section degrades
+full plan -> truncated plan -> link-only, never dropping the check-run link.
+Plan text is emitted only inside a backtick fence computed to be longer than
+any backtick run in the text, so author-controlled plan output cannot escape
+the fence (the comment-body injection surface).
+"""
+
+import glob
+import importlib.util
+import json
+import os
+import pathlib
+import re
+import sys
+from importlib.machinery import SourceFileLoader
+
+_D = pathlib.Path(__file__).resolve().parent
+
+
+def _load(fname):
+    loader = SourceFileLoader(fname.replace("-", "_"), str(_D / fname))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+ag = _load("apply-gate")
+
+MARKER = "<!-- shipmate:summary -->"
+PLAN_PREFIX = "plan / "
+SIZE_BUDGET = 60_000
+HARD_CAP = 65_536
+MIN_PLAN_CHARS = 500
+CELL_KEYS = ("stack", "stack_path", "environment", "add", "change", "destroy", "changed")
+
+# A plan line's change sign, possibly indented: `+`, `-`, `~`, or the
+# replace forms `-/+` / `+/-`. The sign moves to column 0 (GitHub's diff
+# highlighting keys on the first character) and `~` becomes `!` (orange).
+_SIGN = re.compile(r"^( *)(-/\+|\+/-|[-+~])")
+
+
+def diff_map(text):
+    """Rewrite plan lines so change signs land at column 0 for ```diff
+    coloring. The captured indent moves behind the sign, preserving width."""
+
+    def repl(m):
+        sign = "!" if m[2] == "~" else m[2]
+        return sign + m[1]
+
+    return "\n".join(_SIGN.sub(repl, line) for line in text.splitlines())
+
+
+def _fence_of(text):
+    """A backtick fence strictly longer than any backtick run in `text`
+    (min 3) — fence-escape is the only comment-injection vector for content
+    rendered inside a code fence."""
+    longest = max((len(m) for m in re.findall(r"`+", text)), default=0)
+    return "`" * max(3, longest + 1)
+
+
+def fence(text, f=None):
+    f = f or _fence_of(text)
+    return f"{f}diff\n{text}\n{f}"
+
+
+def emoji(cell):
+    if not cell["changed"]:
+        return "🟢"
+    return "🔴" if cell["destroy"] else "🟡"
+
+
+def _md_escape(s):
+    """Neutralize table/summary-line structure characters in author-controlled
+    display names (stack-name is a free-form action input)."""
+    return s.replace("|", "\\|").replace("\r", " ").replace("\n", " ")
