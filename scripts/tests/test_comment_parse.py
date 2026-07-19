@@ -120,8 +120,15 @@ def test_matey_prefix_is_not_a_command():
 
 
 def test_env_uppercase_rejected():
+    # Uppercase is outside the env charset (env is lowercase-only), so the env
+    # group doesn't match -- but it DOES fit the tag charset (which allows
+    # uppercase), so this now falls through to the tag branch rather than
+    # "malformed". Pinned here as a deliberate, tested choice: the user sees a
+    # "tag-filter is not yet supported" error, not a missing/invalid-env one.
     r = cp.parse("mate apply DEV-EU")
     assert r["is_command"] and not r["valid"]
+    assert r["env"] is None and r["tag_filter"] == "DEV-EU"
+    assert "tag-filter" in r["error"]
 
 
 def test_earlier_mate_prefixed_chatter_does_not_block_later_valid_command():

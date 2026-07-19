@@ -57,7 +57,7 @@ def parse(body):
     result["is_command"] = True
     m = _CMD.match(line)
     if not m:
-        result["error"] = "malformed: expected `mate <verb> <env> [tag-filter]`"
+        result["error"] = "malformed: expected `mate <verb> [env] [tag-filter]`"
         return result
     verb, env, tag = m.group("verb"), m.group("env"), m.group("tag")
     result.update(verb=verb, env=env, tag_filter=tag)
@@ -70,7 +70,7 @@ def parse(body):
     if tag is not None:
         # Parsed for forward-compat, but no component honors it yet — reject
         # rather than silently apply the whole env (matches reserved-verb handling).
-        result["error"] = "tag-filter is not yet supported (omit it: `mate <verb> <env>`)"
+        result["error"] = "tag-filter is not yet supported (omit it: `mate <verb> [env]`)"
         return result
     result["valid"] = True
     return result
