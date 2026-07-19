@@ -242,3 +242,14 @@ def test_cell_summary_artifact_uploads_plan_text():
     src = (_ENGINE / "actions" / "plan-cell" / "action.yml").read_text(encoding="utf-8")
     upload = src.split("Upload cell summary", 1)[1].split("retention-days", 1)[0]
     assert "plan.txt" in upload
+
+
+def test_marker_round_trip_guard_summary_action_matches_script():
+    # Coupling: the marker summary-comment embeds <-> the marker the summary
+    # action's upsert step greps for. Drift = a new comment every run instead
+    # of an edit-in-place. Assert both action sites carry the script's marker
+    # and that the build step actually invokes the script.
+    src = (_ENGINE / "actions" / "summary" / "action.yml").read_text(encoding="utf-8")
+    assert src.count(sc.MARKER) >= 1, "upsert step no longer greps the script's marker"
+    assert "scripts/summary-comment" in src, "summary action no longer calls summary-comment"
+    assert sc.build_comment([], {}, "u").startswith(sc.MARKER)

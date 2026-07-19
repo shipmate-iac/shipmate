@@ -27,36 +27,20 @@ runs:
       id: build
       shell: bash
       env:
+        GH_TOKEN: ${{ inputs.github-token }}
         CELLS: ${{ inputs.cells-dir }}
+        HEAD_SHA: ${{ inputs.head-sha }}
       run: |
         set -euo pipefail
-        python3 - <<'PY'
-        import glob, json, os
-        cells = []
-        for p in glob.glob(os.environ["CELLS"] + "/**/cell.json", recursive=True):
-            with open(p) as fh:
-                cells.append(json.load(fh))
-        cells.sort(key=lambda c: (c["environment"], c["stack"]))
-        run_url = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
-        lines = ["<!-- shipmate:summary -->",
-                 "### shipmate preview",
-                 "", "| stack | env | + | ~ | - | status |",
-                 "|---|---|--:|--:|--:|---|"]
-        pending = False
-        for c in cells:
-            st = "apply pending" if c["changed"] else "no changes"
-            if c["changed"]:
-                pending = True
-            lines.append(f"| {c['stack']} | {c['environment']} | {c['add']} | {c['change']} | {c['destroy']} | {st} |")
-        if not cells:
-            lines.append("| _(no stacks changed)_ |  |  |  |  |  |")
-        lines += ["", f"[Plans, logs & artifacts]({run_url}) — plan text is in each `plan / <env> / <stack>` job summary."]
-        with open("comment.md", "w") as fh:
-            fh.write("\n".join(lines))
-        with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
-            fh.write(f"pending={'true' if pending else 'false'}\n")
-            fh.write(f"count={len(cells)}\n")
-        PY
+        [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::head-sha must be a 40-char lowercase hex SHA (got: $HEAD_SHA)"; exit 1; }
+        # filter=all + latest-run-per-name (apply-gate.latest_by_name): the
+        # same check-runs read discipline as checkmate-refresh / the detects.
+        # summary-comment resolves each cell's plan-check link from this list
+        # and writes comment.md + pending/count to GITHUB_OUTPUT.
+        gh api --paginate \
+          "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/check-runs?filter=all&per_page=100" \
+          --jq '.check_runs[] | {name, html_url, id}' \
+          | python3 "$GITHUB_ACTION_PATH/../../scripts/summary-comment"
 
     - name: Upsert sticky comment
       shell: bash
