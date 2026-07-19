@@ -41,7 +41,7 @@ runs:
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         RUN_ID: ${{ inputs.preview-run-id }}
-        ART: plan-${{ steps.ids.outputs.slug }}-${{ inputs.env }}
+        ART: plan.${{ inputs.env }}.${{ steps.ids.outputs.slug }}
         ENV: ${{ inputs.env }}
         STACK_NAME: ${{ inputs.stack-name }}
       run: |

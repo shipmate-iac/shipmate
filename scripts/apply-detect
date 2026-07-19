@@ -3,7 +3,7 @@
 
 Unlike deploy-detect (merge-driven, all envs), the work set here is scoped to
 ONE environment and sourced from a specific preview run's plan artifacts:
-`plan-<slug>-<env>` artifacts present in SHIPMATE_PLAN_RUN_ID name exactly the
+`plan.<env>.<slug>` artifacts present in SHIPMATE_PLAN_RUN_ID name exactly the
 stacks that were planned for this env. We map each present slug back to a stack
 PATH via the run-graph (path->slug is one-way; we slug each graph node forward
 and match), drop cells whose apply check already completed (idempotent no-op),
@@ -43,15 +43,18 @@ def _slug(path):
 
 
 def workset_from_artifacts(artifact_names, env, graph_paths):
-    """Cells for `env` = graph stacks whose exact `plan-<slug>-<env>` artifact is
+    """Cells for `env` = graph stacks whose exact `plan.<env>.<slug>` artifact is
     present in the plan run. Forward-construct the expected name per graph path
-    (never reverse-parse the artifact name): both `slug` and `env` can contain
-    '-', so a reverse split is ambiguous and lets a dash-suffix env (e.g. `eu`)
-    cross-match another env's artifacts (`...-dev-eu`). Forward matching avoids
-    that. path->slug is many-to-one, so fail loud if two paths collide."""
+    (never reverse-parse the artifact name). The `.` delimiter is unambiguous
+    because a Terramate env name cannot contain `.` (tag grammar forbids it), so
+    with env first the first `.` after the `plan.` prefix is always the env<->slug
+    boundary -- distinct (env, slug) pairs always render distinct names, unlike
+    the old `plan-<slug>-<env>` where a dash-bearing env (e.g. `eu`) could
+    cross-match another env's artifacts (`...-dev-eu`). path->slug is
+    many-to-one, so fail loud if two paths collide."""
     names = set(artifact_names)
     cells = [
-        {"stack": p, "environment": env} for p in graph_paths if f"plan-{_slug(p)}-{env}" in names
+        {"stack": p, "environment": env} for p in graph_paths if f"plan.{env}.{_slug(p)}" in names
     ]
     slugs = [_slug(c["stack"]) for c in cells]
     dupes = sorted({s for s in slugs if slugs.count(s) > 1})
