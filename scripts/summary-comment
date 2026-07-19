@@ -48,16 +48,40 @@ CELL_KEYS = ("stack", "stack_path", "environment", "add", "change", "destroy", "
 # highlighting keys on the first character) and `~` becomes `!` (orange).
 _SIGN = re.compile(r"^( *)(-/\+|\+/-|[-+~])")
 
+# A heredoc opener (`<<EOT` / `<<-EOT`), capturing the terminator word.
+_HEREDOC_OPEN = re.compile(r"<<-?([A-Za-z_][A-Za-z0-9_]*)")
+
 
 def diff_map(text):
     """Rewrite plan lines so change signs land at column 0 for ```diff
-    coloring. The captured indent moves behind the sign, preserving width."""
+    coloring. The captured indent moves behind the sign, preserving width.
+
+    Heredoc-aware: a heredoc's literal body (e.g. cloud-init YAML embedded in
+    a `user_data = <<-EOT` value) can itself start with `-`/`~`/`+` — those
+    are content, not plan diff markers. Once an opener line is seen, sign
+    mapping is suspended until the line that closes it (its `strip()`, with
+    any trailing `,` also stripped, equal to the terminator word), then
+    resumes. The opener line itself is still sign-mapped — it is a real
+    change line.
+    """
 
     def repl(m):
         sign = "!" if m[2] == "~" else m[2]
         return sign + m[1]
 
-    return "\n".join(_SIGN.sub(repl, line) for line in text.splitlines())
+    out = []
+    terminator = None
+    for line in text.splitlines():
+        if terminator is not None:
+            out.append(line)
+            if line.strip().rstrip(",") == terminator:
+                terminator = None
+            continue
+        out.append(_SIGN.sub(repl, line))
+        opener = _HEREDOC_OPEN.search(line)
+        if opener:
+            terminator = opener[1]
+    return "\n".join(out)
 
 
 def _fence_of(text):
@@ -83,13 +107,18 @@ def _md_escape(s):
     """Neutralize table/summary-line structure characters in author-controlled
     display names (stack-name is a free-form action input). `<`/`>` are
     escaped so a name like `x</summary><b>` cannot close the `<summary>` /
-    `<details>` HTML elements the table and section headers are built from."""
+    `<details>` HTML elements the table and section headers are built from.
+    `[`/`]` are escaped so a name like `[approve this deploy](https://evil)`
+    cannot form a live markdown link inside the trusted bot comment; the
+    entities render literally in both the table and `<summary>` contexts."""
     return (
         s.replace("|", "\\|")
         .replace("\r", " ")
         .replace("\n", " ")
         .replace("<", "&lt;")
         .replace(">", "&gt;")
+        .replace("[", "&#91;")
+        .replace("]", "&#93;")
     )
 
 
@@ -155,8 +184,14 @@ def render_section(cell, plan_text, url, limit):
     trailer = f"\n\n_Truncated — [full plan in the check run]({url})._\n</details>"
     room = limit - len(head) - len(fence("", f)) - len(trailer)
     if room >= MIN_PLAN_CHARS:
-        cut = body[:room].rsplit("\n", 1)[0]
-        return f"{head}{fence(cut, f)}{trailer}"
+        sliced = body[:room]
+        # Cut at the last full line inside `room`. When the first line alone
+        # already exceeds `room`, `rfind` returns -1 and the slice would be
+        # the whole (still mid-line) fragment — degrade to link-only instead
+        # of violating "cut at a line boundary".
+        cut = sliced[: sliced.rfind("\n")] if "\n" in sliced else ""
+        if cut:
+            return f"{head}{fence(cut, f)}{trailer}"
     return link_only(cell, url)
 
 
@@ -171,10 +206,15 @@ def build_comment(cells, checks, run_url):
     changed = [(c, t) for c, t in cells if c["changed"]]
     parts = [header]
     used = len(header) + len(footer)
-    reserve = sum(len(link_only(c, check_url(c, checks, run_url))) + 2 for c, _ in changed)
+    # Precompute check_url/link_only once per changed cell (each recomputing
+    # it here and again below made every changed cell do the lookup twice).
+    enriched = []
     for c, text in changed:
         url = check_url(c, checks, run_url)
-        reserve -= len(link_only(c, url)) + 2
+        enriched.append((c, text, url, link_only(c, url)))
+    reserve = sum(len(lo) + 2 for *_, lo in enriched)
+    for c, text, url, lo in enriched:
+        reserve -= len(lo) + 2
         section = render_section(c, text, url, SIZE_BUDGET - used - reserve - 2)
         parts.append(section)
         used += len(section) + 2
@@ -196,10 +236,32 @@ def build_comment(cells, checks, run_url):
     return body
 
 
+_STR_KEYS = ("stack", "stack_path", "environment")
+_INT_KEYS = ("add", "change", "destroy")
+
+
+def _validate_cell(cell, path):
+    """Type-check cell.json values past the missing-keys check. A
+    pin-skewed/crafted cell.json can carry the right keys with the wrong
+    types (e.g. `add = "1 |</summary>..."`, or `changed = "false"` — a
+    truthy string) and would otherwise land unescaped in the comment and
+    wedge the gate. `type(v) is int`, not `isinstance`, because
+    `isinstance(True, int)` is `True` and a bool must not pass as an int."""
+    for k in _STR_KEYS:
+        if type(cell[k]) is not str:
+            raise SystemExit(f"::error::cell summary {path} key {k!r} must be a string")
+    for k in _INT_KEYS:
+        if type(cell[k]) is not int:
+            raise SystemExit(f"::error::cell summary {path} key {k!r} must be an int")
+    if type(cell["changed"]) is not bool:
+        raise SystemExit(f"::error::cell summary {path} key 'changed' must be a bool")
+
+
 def load_cells(cells_dir):
     """(cell, plan_text) per downloaded cell-summary artifact, sorted by
-    (environment, stack). A cell.json missing schema keys fails loud — that
-    is plan-cell/summary pin skew, not a state to render around."""
+    (environment, stack). A cell.json missing schema keys, or carrying the
+    right keys with the wrong types, fails loud — that is plan-cell/summary
+    pin skew, not a state to render around."""
     out = []
     for p in sorted(glob.glob(os.path.join(cells_dir, "**", "cell.json"), recursive=True)):
         with open(p, encoding="utf-8") as fh:
@@ -210,8 +272,18 @@ def load_cells(cells_dir):
                 f"::error::cell summary {p} missing keys {missing} — "
                 "plan-cell and summary must be pinned at the same engine SHA"
             )
+        _validate_cell(cell, p)
         txt = pathlib.Path(p).with_name("plan.txt")
-        out.append((cell, txt.read_text(encoding="utf-8") if txt.exists() else None))
+        text = None
+        if txt.exists():
+            # Cap the read at SIZE_BUDGET: a body of length >= SIZE_BUDGET
+            # always exceeds every section's limit (all strictly below
+            # SIZE_BUDGET), so characters beyond it could never be emitted
+            # anyway — this keeps an unbounded multi-MB plan.txt from being
+            # fully read and regex-scanned (diff_map, _fence_of) for nothing.
+            with open(txt, encoding="utf-8") as fh:
+                text = fh.read(SIZE_BUDGET)
+        out.append((cell, text))
     out.sort(key=lambda ct: (ct[0]["environment"], ct[0]["stack"]))
     return out
 

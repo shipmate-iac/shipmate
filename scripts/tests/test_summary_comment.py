@@ -57,6 +57,31 @@ def test_diff_map_does_not_touch_interior_tildes():
     assert sc.diff_map("value = ~/.config") == "value = ~/.config"
 
 
+def test_diff_map_is_heredoc_aware_leaves_body_lines_untouched():
+    # A heredoc's literal body (e.g. cloud-init YAML) can itself start with
+    # `-`/`~` — those are content, not plan diff markers, and must survive
+    # byte-identical. The opener line is still a real change line and maps.
+    text = (
+        "  + user_data = <<-EOT\n"
+        "        - name: install\n"
+        "        ~ literal tilde line\n"
+        "    EOT\n"
+        '  + resource "x" "y" {'
+    )
+    out = sc.diff_map(text).splitlines()
+    assert out[0] == "+   user_data = <<-EOT"
+    assert out[1] == "        - name: install"
+    assert out[2] == "        ~ literal tilde line"
+    assert out[3] == "    EOT"
+    assert out[4] == '+   resource "x" "y" {'
+
+
+def test_diff_map_resumes_sign_mapping_after_heredoc_terminator():
+    text = "  + user_data = <<EOT\n    body\n    EOT\n  ~ real change"
+    out = sc.diff_map(text).splitlines()
+    assert out[-1] == "!   real change"
+
+
 # --- fence ----------------------------------------------------------------
 
 
@@ -86,6 +111,10 @@ def test_md_escape_neutralizes_pipes_and_newlines():
 
 def test_md_escape_neutralizes_angle_brackets():
     assert sc._md_escape("x</summary><b>") == "x&lt;/summary&gt;&lt;b&gt;"
+
+
+def test_md_escape_neutralizes_markdown_link_syntax():
+    assert sc._md_escape("[x](https://e)") == "&#91;x&#93;(https://e)"
 
 
 # --- table / sections -------------------------------------------------------
@@ -129,6 +158,16 @@ def test_render_section_truncates_to_limit_with_check_link():
     assert len(s) <= 3_000
     assert "Truncated" in s and "https://ck/app-eu" in s
     assert s.rstrip().endswith("</details>")
+
+
+def test_render_section_degrades_to_link_only_when_first_line_exceeds_room():
+    # A single line longer than the truncated slice has no newline to cut at
+    # ("cut at a line boundary" per CONTRACT.md) — must degrade to link-only
+    # rather than emit a mid-line-truncated fence.
+    plan = "x" * 5_000
+    s = sc.render_section(_cell(), plan, "https://ck/app-eu", 3_000)
+    assert "```" not in s
+    assert "https://ck/app-eu" in s
 
 
 def test_render_section_link_only_when_limit_tiny_or_plan_missing():
@@ -220,6 +259,47 @@ def test_load_cells_fails_loud_on_missing_schema_keys(tmp_path):
 
 def test_load_cells_empty_dir_ok(tmp_path):
     assert sc.load_cells(str(tmp_path / "nope")) == []
+
+
+def test_load_cells_fails_loud_on_wrong_type_int_field(tmp_path):
+    d = tmp_path / "cell-summary.x.y"
+    d.mkdir()
+    bad = _cell(add="1 |</summary>...")
+    (d / "cell.json").write_text(json.dumps(bad))
+    with pytest.raises(SystemExit, match="add"):
+        sc.load_cells(str(tmp_path))
+
+
+def test_load_cells_fails_loud_on_wrong_type_bool_field(tmp_path):
+    d = tmp_path / "cell-summary.x.y"
+    d.mkdir()
+    bad = _cell(changed="false")  # truthy string — must not pass as bool
+    (d / "cell.json").write_text(json.dumps(bad))
+    with pytest.raises(SystemExit, match="changed"):
+        sc.load_cells(str(tmp_path))
+
+
+def test_load_cells_rejects_bool_for_int_field(tmp_path):
+    # isinstance(True, int) is True; the guard must use type(v) is int so a
+    # bool masquerading as an int field still fails loud.
+    d = tmp_path / "cell-summary.x.y"
+    d.mkdir()
+    bad = _cell(destroy=True)
+    (d / "cell.json").write_text(json.dumps(bad))
+    with pytest.raises(SystemExit, match="destroy"):
+        sc.load_cells(str(tmp_path))
+
+
+def test_load_cells_caps_plan_text_read_at_size_budget(tmp_path):
+    d = tmp_path / "cell-summary.x.y"
+    d.mkdir()
+    (d / "cell.json").write_text(json.dumps(_cell()))
+    line = "  + resource line padded to a fixed width for this test case\n"  # 63 chars
+    (d / "plan.txt").write_text(line * 1_112)  # > 70_000 chars, well past SIZE_BUDGET
+    cells = sc.load_cells(str(tmp_path))
+    assert len(cells[0][1]) == sc.SIZE_BUDGET
+    body = sc.build_comment(cells, {}, RUN_URL)
+    assert "Truncated" in body
 
 
 # --- coupling guards ---------------------------------------------------------
