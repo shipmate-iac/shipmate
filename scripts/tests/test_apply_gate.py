@@ -241,3 +241,27 @@ def test_parse_jsonl_truncates_long_offending_line():
     msg = str(exc_info.value)
     assert len(msg) < 300
     assert "xxx" in msg
+
+
+def test_latest_by_name_prefix_parameter_selects_plan_checks():
+    runs = [
+        {"name": "plan / dev-eu / stacks/app", "id": 1, "html_url": "u1"},
+        {"name": "plan / dev-eu / stacks/app", "id": 3, "html_url": "u3"},
+        {"name": "apply / dev-eu / stacks/app", "id": 2, "html_url": "u2"},
+    ]
+    latest = ag.latest_by_name(runs, prefix="plan / ")
+    assert set(latest) == {"plan / dev-eu / stacks/app"}
+    assert latest["plan / dev-eu / stacks/app"]["html_url"] == "u3"
+
+
+def test_latest_by_name_default_prefix_unchanged():
+    runs = [
+        {"name": "plan / dev-eu / stacks/app", "id": 1},
+        {
+            "name": "apply / dev-eu / stacks/app",
+            "id": 2,
+            "status": "completed",
+            "conclusion": "success",
+        },
+    ]
+    assert set(ag.latest_by_name(runs)) == {"apply / dev-eu / stacks/app"}
