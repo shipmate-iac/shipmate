@@ -121,3 +121,67 @@ def test_read_env_order_rejects_non_dict_global():
 def test_read_env_order_rejects_non_str_predecessor_element():
     with pytest.raises(SystemExit):
         eo.read_env_order(run=lambda args: '{"dev-us":["dev-eu", 123]}')
+
+
+def test_read_explicit_envs_default_invocation(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(eo.bm, "_run", lambda args: captured.update(args=args) or "[]")
+    assert eo.read_explicit_envs() == []
+    assert captured["args"] == [
+        "terramate",
+        "experimental",
+        "eval",
+        "--as-json",
+        "tm_try(global.shipmate.explicit_envs, [])",
+    ]
+
+
+def test_read_explicit_envs_parses_list():
+    assert eo.read_explicit_envs(run=lambda args: '["prod"]') == ["prod"]
+
+
+def test_read_explicit_envs_absent_is_empty():
+    assert eo.read_explicit_envs(run=lambda args: "[]") == []
+
+
+def test_read_explicit_envs_rejects_bare_string():
+    # HCL author typo: "prod" instead of ["prod"] -- must not silently iterate
+    # the string char-by-char (mirror the env_order validation posture).
+    with pytest.raises(SystemExit):
+        eo.read_explicit_envs(run=lambda args: '"prod"')
+
+
+def test_read_explicit_envs_rejects_dict():
+    with pytest.raises(SystemExit):
+        eo.read_explicit_envs(run=lambda args: '{"prod": true}')
+
+
+def test_read_explicit_envs_rejects_non_str_element():
+    with pytest.raises(SystemExit):
+        eo.read_explicit_envs(run=lambda args: '["prod", 123]')
+
+
+def test_blocked_envs_direct_predecessor():
+    order = {"stage": ["dev"], "prod": ["stage"]}
+    assert eo.blocked_envs(order, {"stage"}, {"dev", "prod"}) == {"prod"}
+
+
+def test_blocked_envs_transitive():
+    # prod -> stage -> dev; dev unavailable blocks prod through stage.
+    order = {"stage": ["dev"], "prod": ["stage"]}
+    assert eo.blocked_envs(order, {"dev"}, {"stage", "prod"}) == {"stage", "prod"}
+
+
+def test_blocked_envs_unrelated_env_not_blocked():
+    # sbx does not list stage anywhere in its predecessor chain.
+    order = {"prod": ["stage"], "sbx": ["dev"]}
+    assert eo.blocked_envs(order, {"stage"}, {"dev", "sbx", "prod"}) == {"prod"}
+
+
+def test_blocked_envs_nothing_unavailable():
+    assert eo.blocked_envs({"prod": ["stage"]}, set(), {"stage", "prod"}) == set()
+
+
+def test_blocked_envs_validates_order_shape():
+    with pytest.raises(SystemExit):
+        eo.blocked_envs({"prod": "stage"}, {"stage"}, {"prod"})

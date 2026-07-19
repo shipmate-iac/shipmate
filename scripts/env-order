@@ -83,6 +83,56 @@ def read_env_order(run=None):
     return _validate_env_order(json.loads(out))
 
 
+def _validate_explicit_envs(envs):
+    """Raise SystemExit unless `envs` is a list of env-name strings. Guards the
+    HCL author typo of a bare string (silently iterated char-by-char) and any
+    non-list global — same fail-loud posture as env_order."""
+    if not isinstance(envs, list):
+        raise SystemExit(
+            "::error::explicit_envs global must be a list of env-name strings, "
+            f"got {type(envs).__name__} ({envs!r}); did you mean [{envs!r}]?"
+        )
+    bad = [e for e in envs if not isinstance(e, str)]
+    if bad:
+        raise SystemExit(
+            f"::error::explicit_envs elements must all be env-name strings; "
+            f"got non-string element(s) {bad!r}"
+        )
+    return envs
+
+
+def read_explicit_envs(run=None):
+    """Envs excluded from a bare `mate apply` (they must be targeted by name:
+    `mate apply <env>`), or [] when the global/config is absent."""
+    run = run or bm._run
+    out = run(
+        [
+            "terramate",
+            "experimental",
+            "eval",
+            "--as-json",
+            "tm_try(global.shipmate.explicit_envs, [])",
+        ]
+    )
+    return _validate_explicit_envs(json.loads(out))
+
+
+def blocked_envs(order, unavailable, envs):
+    """Envs in `envs` with an unavailable env among their transitive
+    predecessors (per `order`). The bare-apply path skips these with a notice:
+    their ordering precondition cannot be met this run (an explicit env
+    upstream was excluded), exactly like a failed predecessor level."""
+    _validate_env_order(order)
+
+    def _hit(env, seen):
+        if env in seen:
+            return False
+        seen.add(env)
+        return any(p in unavailable or _hit(p, seen) for p in order.get(env, []))
+
+    return {e for e in envs if _hit(e, set())}
+
+
 def env_levels(order, envs):
     """Topological level (0-based) per env in `envs`. Predecessors absent from
     `envs` (no changed cells this run) still constrain ordering."""
