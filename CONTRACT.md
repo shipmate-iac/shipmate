@@ -222,6 +222,55 @@ both pins **together** when adopting a build that changes this name: a partial
 bump (uploader on the new name, downloader on the old, or vice versa) makes
 every apply fail its reviewed-plan download fail-safe until the pins agree.
 
+## Preview comment
+
+The `summary` action maintains exactly one sticky comment per pull request,
+identified by the HTML marker written verbatim as the comment's first line:
+
+- `<!-- shipmate:summary -->`
+
+The comment is edited in place on every preview run (comment lookup is
+marker + `github-actions[bot]` author), so GitHub's comment revision history
+doubles as the audit trail of previous plans for the PR.
+
+Structure, in order: an overview table (one row per planned stack ×
+environment: verdict emoji — 🟢 no changes / 🟡 changes / 🔴 contains
+destroys — add/change/destroy counts, and a link to that cell's
+`plan / <env> / <stack>` check run), then one `<details>` section per
+**changed** cell containing the rendered plan inside a `diff`-tagged code
+fence (change signs moved to column 0; `~` mapped to `!`). Cells with no
+changes get a table row only. Check links are built **forward** from the
+cell's `(environment, stack-path)` pair using the check-name grammar above;
+when the check run cannot be resolved, the link degrades to the workflow-run
+URL.
+
+GitHub caps issue-comment bodies at 65,536 characters. The comment is built
+to a smaller budget: each changed cell's section degrades, in order, full
+plan → truncated plan (cut at a line boundary, with a link to the check run
+carrying the full text) → link-only. The overview table is never dropped.
+If even the table alone cannot fit the cap, the summary fails loud rather
+than posting a truncated table. Plan text is emitted only inside a backtick
+fence computed to be longer than any backtick run in the text —
+author-controlled plan output cannot escape the fence.
+
+The data feeding the comment ships in the per-cell artifact
+`cell-summary.<env>.<slug>` (same dot-delimited, env-first grammar as
+`plan.<env>.<slug>`: the name is built forward from the `(env, slug)` pair
+exactly like the plan artifact, never reverse-parsed). Consumers download it
+with the glob pattern `cell-summary.*`. It contains verbatim:
+
+- `cell.json` — keys `stack` (display name), `stack_path` (Terramate stack
+  path, feeds the check-name construction), `environment`, `add`, `change`,
+  `destroy` (integers), `changed` (boolean); written by `plan-cell` at plan
+  time from `scripts/plan-classify` output — the summary never re-parses
+  plan text.
+- `plan.txt` — the `tofu show -no-color` rendering of the reviewed plan.
+
+`plan-cell` (writer) and `summary` (reader) are pinned by the same SHA in a
+consumer's `preview.yml`, so the schema upgrades atomically; the summary
+fails loud on a `cell.json` missing schema keys rather than rendering around
+pin skew.
+
 ## Apply-match fingerprint
 
 Each plan stores a fingerprint (`fingerprint.txt`, artifact `external_id` on the

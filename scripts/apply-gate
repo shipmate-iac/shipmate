@@ -28,18 +28,19 @@ APPLY_PREFIX = "apply / "
 DONE_CONCLUSIONS = {"success", "neutral"}
 
 
-def latest_by_name(check_runs):
-    """Group `apply / <env> / <stack>` check-runs by name, keeping only the
-    newest run per name. "Newest" is by check-run `id`: GitHub assigns ids
-    monotonically at creation, so the highest id is the most recently created
-    run -- and unlike `started_at` (nullable; a freshly-created queued run may
-    carry none) it is always present, so a newer queued duplicate never sorts
-    below an older completed run. Non-apply check-runs are dropped.
-    Returns {name: run}."""
+def latest_by_name(check_runs, prefix=APPLY_PREFIX):
+    """Group check-runs by name (names starting with `prefix`; default: apply
+    checks), keeping only the newest run per name. "Newest" is by check-run
+    `id`: GitHub assigns ids monotonically at creation, so the highest id is
+    the most recently created run -- and unlike `started_at` (nullable; a
+    freshly-created queued run may carry none) it is always present, so a
+    newer queued duplicate never sorts below an older completed run.
+    summary-comment reuses this with prefix="plan / " to resolve plan-check
+    links. Returns {name: run}."""
     latest = {}
     for run in check_runs:
         name = run["name"]
-        if not name.startswith(APPLY_PREFIX):
+        if not name.startswith(prefix):
             continue
         key = run.get("id") or 0
         if name not in latest or key > latest[name][0]:
