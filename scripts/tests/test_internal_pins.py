@@ -13,9 +13,14 @@ so the ``--disable-safeguards=git-out-of-sync`` fix never reached post-merge
 applies even after consumers re-pinned to the new engine SHA.
 
 This test asserts every internal ``ship-iac/shipmate/<path>@<sha>`` reference
-pins a commit whose ``<path>`` content is identical to the current tree. A
-difference means the pin is stale: bump it to a commit that contains the current
-action (in practice, a follow-up commit pinning the just-merged release SHA).
+pins a commit whose ``<path>`` content matches the **mainline** (the merge-base
+with ``main``), not HEAD. A difference means the pin is stale on the release
+line: bump it to a commit that contains the current action (in practice, a
+follow-up commit pinning the just-merged release SHA). Comparing against the
+mainline -- rather than HEAD -- means a branch that edits a pinned action isn't
+flagged for its own not-yet-merged change (the bump is impossible before the
+change has a SHA); the guard still fires once that change reaches ``main``
+without a pin bump. See ``_release_baseline``.
 """
 
 import pathlib
@@ -48,19 +53,47 @@ def _commit_present(sha):
     return _git("cat-file", "-e", f"{sha}^{{commit}}").returncode == 0
 
 
+def _release_baseline():
+    """The commit the pins must be current against: the merge-base with the
+    mainline, NOT HEAD.
+
+    A pin is a *self*-reference, so the commit that edits a pinned action can
+    never also pin that action's SHA (a commit cannot pin its own unborn SHA) --
+    the bump is a documented follow-up (docs/releasing.md). Comparing against
+    HEAD therefore reds every branch that edits a pinned action from the first
+    keystroke, which is in-flight work, not staleness. Comparing against the
+    fork point (merge-base with main) instead means: the pin was current on the
+    release line this branch derives from. That keeps the real guard -- once an
+    action change merges to main without a pin bump, merge-base == main and the
+    stale pin fails, exactly where the bump can be done -- while an in-flight
+    branch that has only *its own* unmerged edits stays green. Falls back to
+    HEAD when no mainline ref is reachable (shallow/detached), preserving the
+    prior behavior rather than silently passing.
+    """
+    for base in ("origin/main", "main"):
+        r = _git("merge-base", "HEAD", base)
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    return "HEAD"
+
+
 def test_internal_action_pins_are_current():
     refs = _self_refs()
     assert refs, "no internal shipmate self-references found -- regex or repo layout changed?"
 
+    baseline = _release_baseline()
     stale, unverifiable = [], []
     for path, sha, src in refs:
         if not _commit_present(sha):
             unverifiable.append(f"{src}: {path}@{sha[:12]} (commit not in this clone)")
             continue
-        # --quiet: exit 0 == identical, 1 == the path changed between the pin and HEAD.
-        r = _git("diff", "--quiet", sha, "HEAD", "--", path)
+        # --quiet: exit 0 == identical, 1 == the path differs between the pin and
+        # the release baseline (merge-base with main), i.e. the pin is stale on
+        # the mainline. A branch's own unmerged edits don't count -- they aren't
+        # on the baseline yet.
+        r = _git("diff", "--quiet", sha, baseline, "--", path)
         if r.returncode == 1:
-            stale.append(f"{src} pins {path}@{sha[:12]} but {path} changed since that commit")
+            stale.append(f"{src} pins {path}@{sha[:12]} but {path} changed on the mainline since")
         elif r.returncode != 0:
             stale.append(f"{src}: git diff failed for {path}@{sha[:12]}: {r.stderr.strip()}")
 
