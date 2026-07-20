@@ -33,6 +33,7 @@ extend-include = [
     "scripts/deploy-detect",
     "scripts/env-order",
     "scripts/plan-classify",
+    "scripts/plan-crypt",
     "scripts/register-app",
     "scripts/summary-comment",
     "scripts/waves",

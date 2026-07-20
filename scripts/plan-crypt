@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+"""Shared plan-artifact cipher: symmetric encrypt/decrypt of the .otplan file.
+
+Single definition of the openssl invocation so plan-cell (encrypt before
+upload) and apply-cell (decrypt after download) can never drift. The openssl
+flags live ONLY here.
+
+Cipher: openssl enc -aes-256-ctr -pbkdf2 -salt, passphrase from the
+PLAN_PASSPHRASE env var (never argv). Empty/unset PLAN_PASSPHRASE means "no
+passphrase": encrypt is a no-op (uploaded bytes stay identical to the plaintext
+path) and decrypt expects plaintext.
+
+AES-256-CTR is an unauthenticated stream cipher: a WRONG passphrase decrypts to
+garbage WITH EXIT 0 -- it does NOT error. The wrong-passphrase fail-safe is
+enforced downstream by `tofu apply stack.otplan` rejecting the garbage plan
+(exact-plan invariant), so the apply check stays pending.
+"""
+
+import os
+import subprocess
+import sys
+
+MAGIC = b"Salted__"  # openssl salted-header prefix (first 8 bytes)
+ENV_VAR = "PLAN_PASSPHRASE"  # name of the env var carrying the secret (not the secret itself)
+
+
+def _passphrase():
+    return os.environ.get(ENV_VAR, "")
+
+
+def _is_encrypted(path):
+    with open(path, "rb") as fh:
+        return fh.read(len(MAGIC)) == MAGIC
+
+
+def _openssl(path, *, decrypt):
+    # The ONLY place the openssl flags live (coupling: plan-cell <-> apply-cell).
+    # openssl enc cannot read and write the same file, so go via a temp sibling
+    # then atomic-replace. -pass env: keeps the secret out of argv.
+    tmp = path + ".crypt.tmp"
+    args = [
+        "openssl",
+        "enc",
+        "-aes-256-ctr",
+        "-pbkdf2",
+        "-salt",
+        "-in",
+        path,
+        "-out",
+        tmp,
+        "-pass",
+        f"env:{ENV_VAR}",
+    ]
+    if decrypt:
+        args.insert(2, "-d")
+    subprocess.run(args, check=True)  # noqa: S603, S607 - fixed argv, no shell; secret via env, openssl is a runner prereq
+    os.replace(tmp, path)
+
+
+def encrypt(path):
+    """Encrypt in place when a passphrase is set; otherwise leave bytes untouched."""
+    if _passphrase():
+        _openssl(path, decrypt=False)
+
+
+def decrypt(path):
+    """Decrypt in place per the fail-safe table (see module/plan docs)."""
+    has_pass = bool(_passphrase())
+    salted = _is_encrypted(path)
+    if has_pass and salted:
+        _openssl(path, decrypt=True)
+    elif has_pass and not salted:
+        raise SystemExit(
+            "::error::plan artifact is plaintext but a plan-passphrase is configured; "
+            "refusing to apply an unencrypted plan. Re-run preview to produce an encrypted plan."
+        )
+    elif not has_pass and salted:
+        raise SystemExit(
+            "::error::plan artifact is encrypted but no plan-passphrase is configured; "
+            "set the plan-passphrase secret (SHIPMATE_PLAN_PASSPHRASE) to apply this plan."
+        )
+    # not has_pass and not salted -> plaintext passthrough (no-op)
+
+
+def main(argv):
+    if len(argv) != 3 or argv[1] not in ("encrypt", "decrypt"):
+        raise SystemExit("usage: plan-crypt {encrypt|decrypt} <file>")
+    (encrypt if argv[1] == "encrypt" else decrypt)(argv[2])
+
+
+if __name__ == "__main__":
+    main(sys.argv)
