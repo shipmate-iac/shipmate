@@ -180,9 +180,9 @@ triggered by a pre-merge comment or a post-merge push.
 ## Runner prerequisites
 
 - shipmate's actions are composite actions: their steps run under `bash`
-  and call standard-library-only Python scripts, `git`, `curl`, `jq`, and
-  the `gh` CLI. A runner must therefore provide: `bash`, `python3`
-  (Python ≥ 3.11), `git`, `curl`, `jq`, and `gh`.
+  and call standard-library-only Python scripts, `git`, `curl`, `jq`, `openssl`,
+  and the `gh` CLI. A runner must therefore provide: `bash`, `python3`
+  (Python ≥ 3.11), `git`, `curl`, `jq`, `openssl`, and `gh`.
 - Every GitHub-hosted Ubuntu image satisfies this, including the minimal
   `ubuntu-slim` image. Self-hosted runners must preinstall these tools.
 - The Python scripts have **no third-party dependencies** — nothing is
@@ -303,6 +303,44 @@ fingerprint identically and an apply could match the wrong environment's
 reviewed plan. plan-cell and apply-cell use a byte-identical algorithm
 (`scripts/plan-classify`). On mismatch, apply fails safe and reports differing
 variable **names** only — never values.
+
+## Plan artifact encryption
+
+The reviewed machine plan file (`stack.otplan`) can be encrypted at rest in the
+uploaded artifact. When the consumer sets the optional `plan-passphrase` input
+on `plan-cell` (in `preview.yml`), the engine encrypts the plan before upload
+using a single symmetric cipher: `openssl enc -aes-256-ctr -pbkdf2 -salt`,
+passphrase supplied via `-pass env:` (never on the command line). `apply-cell`
+decrypts it after download on **every** apply path: the targeted
+`mate apply <env>` path (`apply.yml`) passes `plan-passphrase` as a direct
+input; the post-merge deploy and the bare `mate apply` path both pass it as
+the optional `SHIPMATE_PLAN_PASSPHRASE` secret into the reusable
+`apply-env-level.yml` workflow — directly from `deploy.yml`, and via
+`apply-all.yml` for the bare form. Consumers set the repo/environment secret
+`SHIPMATE_PLAN_PASSPHRASE` and forward it with `secrets:` (or
+`secrets: inherit`) in their `deploy.yml` and `apply-all.yml` wrapper
+workflows.
+
+- **Backward compatible.** An empty/unset `plan-passphrase` leaves the plan
+  plaintext and the uploaded bytes byte-identical to a no-encryption run.
+- **Fail-safe on mismatch.** apply-cell refuses to proceed rather than apply the
+  wrong thing: a plaintext artifact when a passphrase is configured, or an
+  encrypted artifact (`Salted__` magic header) when none is, both fail loud with
+  a re-plan / set-the-secret instruction. A **wrong** passphrase is not detected
+  at decrypt (AES-CTR is unauthenticated and decrypts to garbage without error);
+  the exact-plan invariant catches it — `tofu apply` rejects the garbage plan and
+  the apply check stays pending.
+- **Scope: the machine plan file only.** `fingerprint.txt` is a hash and stays
+  plain. The rendered plan `plan.txt` — in the `cell-summary` artifact and in the
+  PR sticky comment / check-run text — **stays plaintext**: it is the
+  deliberately-public reviewer view. A consumer with secret-bearing plans must
+  use provider-level `sensitive` marking so those values are redacted in the
+  rendered output; encryption alone does not hide them from anyone who can read
+  the PR or download the `cell-summary` artifact.
+- **Both sides must agree.** `plan-cell` (encrypt) and `apply-cell` (decrypt) are
+  pinned independently (`preview.yml` vs `apply.yml`); the passphrase and the
+  engine SHA must match on both. A mismatch surfaces as the fail-safe above, not
+  a silent wrong apply.
 
 ## Terramate safeguards
 
