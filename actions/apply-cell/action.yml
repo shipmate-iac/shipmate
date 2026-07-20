@@ -22,6 +22,10 @@ inputs:
   github-token:
     description: GITHUB_TOKEN with checks:write and actions:read.
     required: true
+  plan-passphrase:
+    description: Passphrase to decrypt the .otplan artifact; must match plan-cell's. Empty = expect plaintext.
+    required: false
+    default: ""
 runs:
   using: composite
   steps:
@@ -58,6 +62,15 @@ runs:
           exit 1
         fi
         echo "::endgroup::"
+
+    - name: Decrypt reviewed plan artifact (fail-safe on config/plaintext mismatch)
+      shell: bash
+      env:
+        STACK: ${{ inputs.stack }}
+        PLAN_PASSPHRASE: ${{ inputs.plan-passphrase }}
+      run: |
+        set -euo pipefail
+        python3 "$GITHUB_ACTION_PATH/../../scripts/plan-crypt" decrypt "$STACK/stack.otplan"
 
     - name: Verify fingerprint matches the reviewed plan
       shell: bash
