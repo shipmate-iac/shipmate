@@ -17,9 +17,13 @@ inputs:
     description: GITHUB_TOKEN with checks:write.
     required: true
   retention-days:
-    description: Plan artifact retention (days).
+    description: Plan artifact retention (days). Empty = the repository default.
     required: false
-    default: "3"
+    default: ""
+  plan-passphrase:
+    description: Optional passphrase to encrypt the .otplan artifact at rest. Empty = plaintext (backward compatible).
+    required: false
+    default: ""
 runs:
   using: composite
   steps:
@@ -54,6 +58,15 @@ runs:
         tofu -chdir="$STACK" show -no-color stack.otplan > plan.txt
         tofu -chdir="$STACK" show -json stack.otplan > plan.json
         python3 "$GITHUB_ACTION_PATH/../../scripts/plan-classify" plan.json
+
+    - name: Encrypt plan artifact at rest (no-op without a passphrase)
+      shell: bash
+      env:
+        STACK: ${{ inputs.stack }}
+        PLAN_PASSPHRASE: ${{ inputs.plan-passphrase }}
+      run: |
+        set -euo pipefail
+        python3 "$GITHUB_ACTION_PATH/../../scripts/plan-crypt" encrypt "$STACK/stack.otplan"
 
     - name: Step summary (plan text, 64KiB cap)
       shell: bash
