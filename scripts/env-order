@@ -14,9 +14,11 @@ from graphlib import TopologicalSorter
 from importlib.machinery import SourceFileLoader
 
 # Cap on env-DAG depth. COUPLED: bumping this requires matching output slots
-# (envlevelN_waves/_empty) in actions/deploy-detect/action.yml and one caller
-# job per env-level in each consumer deploy.yml — GHA can't declare jobs/outputs
-# dynamically, so the count is fixed in all three places.
+# (envlevelN_waves/_empty) in actions/deploy-detect/action.yml AND
+# actions/apply-all-detect/action.yml, one caller job per env-level in each
+# consumer deploy.yml, and one envlevelN job in the engine's apply-all.yml —
+# GHA can't declare jobs/outputs dynamically, so the count is fixed in all of
+# these places.
 MAX_ENV_LEVELS = 4
 
 _D = pathlib.Path(__file__).resolve().parent
@@ -37,6 +39,10 @@ def _load(fname):
 # (no import-time side effects), which matters because this module is itself
 # loaded by deploy-detect the same way.
 bm = _load("build-matrix")
+# waves_by_env_level / write_env_level_waves live here (env-level logic's home)
+# and use these; loading waves only defines functions/constants (no import-time
+# side effects), same as build-matrix above.
+wv = _load("waves")
 
 
 def _validate_predecessors(env, preds):
@@ -83,6 +89,56 @@ def read_env_order(run=None):
     return _validate_env_order(json.loads(out))
 
 
+def _validate_explicit_envs(envs):
+    """Raise SystemExit unless `envs` is a list of env-name strings. Guards the
+    HCL author typo of a bare string (silently iterated char-by-char) and any
+    non-list global — same fail-loud posture as env_order."""
+    if not isinstance(envs, list):
+        raise SystemExit(
+            "::error::explicit_envs global must be a list of env-name strings, "
+            f"got {type(envs).__name__} ({envs!r}); did you mean [{envs!r}]?"
+        )
+    bad = [e for e in envs if not isinstance(e, str)]
+    if bad:
+        raise SystemExit(
+            f"::error::explicit_envs elements must all be env-name strings; "
+            f"got non-string element(s) {bad!r}"
+        )
+    return envs
+
+
+def read_explicit_envs(run=None):
+    """Envs excluded from a bare `mate apply` (they must be targeted by name:
+    `mate apply <env>`), or [] when the global/config is absent."""
+    run = run or bm._run
+    out = run(
+        [
+            "terramate",
+            "experimental",
+            "eval",
+            "--as-json",
+            "tm_try(global.shipmate.explicit_envs, [])",
+        ]
+    )
+    return _validate_explicit_envs(json.loads(out))
+
+
+def blocked_envs(order, unavailable, envs):
+    """Envs in `envs` with an unavailable env among their transitive
+    predecessors (per `order`). The bare-apply path skips these with a notice:
+    their ordering precondition cannot be met this run (an explicit env
+    upstream was excluded), exactly like a failed predecessor level."""
+    _validate_env_order(order)
+
+    def _hit(env, seen):
+        if env in seen:
+            return False
+        seen.add(env)
+        return any(p in unavailable or _hit(p, seen) for p in order.get(env, []))
+
+    return {e for e in envs if _hit(e, set())}
+
+
 def env_levels(order, envs):
     """Topological level (0-based) per env in `envs`. Predecessors absent from
     `envs` (no changed cells this run) still constrain ordering."""
@@ -107,4 +163,37 @@ def guard_max_env_levels(levels):
         raise SystemExit(
             f"::error::env order spans more than {MAX_ENV_LEVELS} levels "
             f"({sorted(over)}); flatten the env dependency chain."
+        )
+
+
+def waves_by_env_level(pending, deps, levels):
+    """Return a list of MAX_ENV_LEVELS dicts, each {wave0..wave7: [cells]}.
+
+    Cells are bucketed by their env's level (0 = no env-order global, or an env
+    with no predecessors), then stack-wave-ordered within it. Env-levels apply
+    fully in order (level 0 entirely before level 1, etc); stack waves within a
+    level run as today. No env-order global -> every env is level 0 -> a single
+    populated level -> unchanged behavior. Shared by deploy-detect (merge path)
+    and apply-all-detect (bare `mate apply`)."""
+    stack_levels = wv.levels(deps)
+    out = []
+    for lvl in range(MAX_ENV_LEVELS):
+        cells = [c for c in pending if levels.get(c["environment"], 0) == lvl]
+        waves = wv.assign_waves(stack_levels, cells)
+        wv.guard_max_waves(waves)
+        out.append({f"wave{i}": (waves[i] if i < len(waves) else []) for i in range(wv.MAX_WAVES)})
+    return out
+
+
+def write_env_level_waves(fh, per_level):
+    """Emit envlevel{0..N}_waves (JSON) + envlevel{0..N}_empty flags for a list
+    of per-env-level wave dicts, to a GITHUB_OUTPUT file handle. Shared by
+    deploy-detect and apply-all-detect so the env-level output contract that the
+    reusable apply-env-level.yml consumes stays single-sourced -- a format drift
+    between the two detect paths would silently break that shared consumer."""
+    for lvl, w in enumerate(per_level):
+        fh.write(f"envlevel{lvl}_waves={json.dumps(w)}\n")
+        fh.write(
+            f"envlevel{lvl}_empty="
+            f"{'false' if any(w[f'wave{i}'] for i in range(wv.MAX_WAVES)) else 'true'}\n"
         )
