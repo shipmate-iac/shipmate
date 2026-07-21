@@ -142,9 +142,10 @@ reason:
   head means new commits landed since — stale, re-plan required).
 
 A bare `mate apply` is authorized exactly once, by the same four checks — one
-authorization decision covers the whole multi-environment run. It dispatches
-`apply-all.yml` (the targeted form dispatches `apply.yml`); both share the
-same App-minted `workflow_dispatch` mechanism and the same per-env
+authorization decision covers the whole multi-environment run. Both forms
+dispatch the consumer's single `apply.yml` wrapper; its optional `environment`
+input selects the path (set → targeted, empty → bare). Both share the same
+App-minted `workflow_dispatch` mechanism and the same per-env
 `apply-<env>-<stack>` concurrency groups.
 
 The GitHub App used for comment-ops carries exactly this permission set:
@@ -234,8 +235,9 @@ in apply-detect (rename so the path→`-` slug is unique).
 This naming contract is breaking for any in-flight plan artifacts: land the
 change when no applies are mid-flight. It also spans two consumer workflow
 files pinned independently — `preview.yml` pins `plan-cell` (the uploader) and
-`apply.yml` pins `apply-cell`/`apply-detect` (the downloader/matcher). Bump
-both pins **together** when adopting a build that changes this name: a partial
+`apply.yml` pins the engine's reusable apply workflows, which pin
+`apply-cell`/`apply-detect` (the downloader/matcher) internally. Bump both
+pins **together** when adopting a build that changes this name: a partial
 bump (uploader on the new name, downloader on the old, or vice versa) makes
 every apply fail its reviewed-plan download fail-safe until the pins agree.
 
@@ -311,14 +313,13 @@ uploaded artifact. When the consumer sets the optional `plan-passphrase` input
 on `plan-cell` (in `preview.yml`), the engine encrypts the plan before upload
 using a single symmetric cipher: `openssl enc -aes-256-ctr -pbkdf2 -salt`,
 passphrase supplied via `-pass env:` (never on the command line). `apply-cell`
-decrypts it after download on **every** apply path: the targeted
-`mate apply <env>` path (`apply.yml`) passes `plan-passphrase` as a direct
-input; the post-merge deploy and the bare `mate apply` path both pass it as
-the optional `SHIPMATE_PLAN_PASSPHRASE` secret into the reusable
-`apply-env-level.yml` workflow — directly from `deploy.yml`, and via
-`apply-all.yml` for the bare form. Consumers set the repo/environment secret
+decrypts it after download on **every** apply path: all three paths pass it
+as the optional `SHIPMATE_PLAN_PASSPHRASE` secret into the reusable
+`apply-env-level.yml` workflow — directly from `deploy.yml`, via the engine
+`apply-all.yml` for the bare form, and via the engine `apply.yml` for the
+targeted form. Consumers set the repo/environment secret
 `SHIPMATE_PLAN_PASSPHRASE` and forward it with `secrets:` (or
-`secrets: inherit`) in their `deploy.yml` and `apply-all.yml` wrapper
+`secrets: inherit`) in their `deploy.yml` and `apply.yml` wrapper
 workflows.
 
 - **Backward compatible.** An empty/unset `plan-passphrase` leaves the plan
@@ -418,10 +419,14 @@ calls once per env-level, passing that level's pre-computed wave matrix; the
 workflow itself still fans applies out stack-wave by stack-wave exactly as
 described above (see Fan-out).
 
-The engine ships the bare-apply path as the dispatched reusable workflow
+The engine ships the bare-apply path as the reusable workflow
 `.github/workflows/apply-all.yml` (detect → env-levels 0..3 via
-`apply-env-level.yml` → checkmate refresh + result comment); a consuming
-repo's `apply-all.yml` is a thin `workflow_dispatch` wrapper that calls it.
+`apply-env-level.yml` → checkmate refresh + result comment) and the targeted
+path as `.github/workflows/apply.yml` (single-env detect → one
+`apply-env-level.yml` call → checkmate refresh + result comment). A
+consuming repo carries one thin `workflow_dispatch` wrapper, `apply.yml`,
+whose optional `environment` input routes to the targeted or bare engine
+workflow.
 
 ## OpenTofu note
 
