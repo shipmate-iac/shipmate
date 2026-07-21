@@ -1,0 +1,136 @@
+name: deploy
+on:
+  workflow_call:
+    inputs:
+      # The flavor's state filename suffix under actions/state (e.g. `.state`,
+      # `terraform.tfstate`, `terraform.tfstate.d`).
+      state_suffix: { required: true, type: string }
+    secrets:
+      # Declared for documentation; consumers pass `secrets: inherit`. `vars`
+      # (TERRAMATE_VERSION, TOFU_VERSION, SLACK_WEBHOOK) are inherited by a
+      # called workflow automatically; secrets are NOT — without inherit the
+      # env-level applies of an encrypting consumer would all fail their
+      # decrypt fail-safe.
+      SHIPMATE_PLAN_PASSPHRASE: { required: false }
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    permissions: { contents: read, checks: read, actions: read, pull-requests: read }
+    outputs:
+      envlevel0_waves: ${{ steps.d.outputs.envlevel0_waves }}
+      envlevel1_waves: ${{ steps.d.outputs.envlevel1_waves }}
+      envlevel2_waves: ${{ steps.d.outputs.envlevel2_waves }}
+      envlevel3_waves: ${{ steps.d.outputs.envlevel3_waves }}
+      envlevel0_empty: ${{ steps.d.outputs.envlevel0_empty }}
+      envlevel1_empty: ${{ steps.d.outputs.envlevel1_empty }}
+      envlevel2_empty: ${{ steps.d.outputs.envlevel2_empty }}
+      envlevel3_empty: ${{ steps.d.outputs.envlevel3_empty }}
+      head_sha: ${{ steps.d.outputs.head_sha }}
+      preview_run_id: ${{ steps.d.outputs.preview_run_id }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { fetch-depth: 0 }
+      - uses: ship-iac/shipmate/actions/setup@6bd8f566ebddb8fcbb2c33dfd356c129e3b767dc
+        with:
+          terramate-version: ${{ vars.TERRAMATE_VERSION }}
+          tofu-version: ${{ vars.TOFU_VERSION }}
+      - id: d
+        uses: ship-iac/shipmate/actions/deploy-detect@6bd8f566ebddb8fcbb2c33dfd356c129e3b767dc
+        with:
+          # The caller is `on: push` to the default branch; its event payload
+          # (and so the previous main tip) is visible here.
+          base-sha: ${{ github.event.before }}
+          github-token: ${{ github.token }}
+
+  envlevel0:
+    needs: [detect]
+    if: ${{ !failure() && !cancelled() && needs.detect.outputs.envlevel0_empty != 'true' && !contains(join(needs.*.result, ','), 'cancelled') }}
+    uses: ship-iac/shipmate/.github/workflows/apply-env-level.yml@6bd8f566ebddb8fcbb2c33dfd356c129e3b767dc
+    permissions: { contents: read, checks: write, actions: read }
+    with:
+      waves_json: ${{ needs.detect.outputs.envlevel0_waves }}
+      head_sha: ${{ needs.detect.outputs.head_sha }}
+      preview_run_id: ${{ needs.detect.outputs.preview_run_id }}
+      state_suffix: ${{ inputs.state_suffix }}
+    # `inherit`, not an explicit `secrets:` mapping: apply-env-level.yml is pinned
+    # by SHA, and in the window before the post-merge pin bump that pinned revision
+    # may not yet declare SHIPMATE_PLAN_PASSPHRASE. Passing an undeclared secret via
+    # an explicit mapping is a hard load-time error (unlike an undeclared action
+    # input, which is silently ignored); `inherit` is not validated against the
+    # callee and forwards the optional passphrase when the consumer set it.
+    secrets: inherit
+
+  envlevel1:
+    needs: [detect, envlevel0]
+    if: ${{ !failure() && !cancelled() && needs.detect.outputs.envlevel1_empty != 'true' && !contains(join(needs.*.result, ','), 'cancelled') }}
+    uses: ship-iac/shipmate/.github/workflows/apply-env-level.yml@6bd8f566ebddb8fcbb2c33dfd356c129e3b767dc
+    permissions: { contents: read, checks: write, actions: read }
+    with:
+      waves_json: ${{ needs.detect.outputs.envlevel1_waves }}
+      head_sha: ${{ needs.detect.outputs.head_sha }}
+      preview_run_id: ${{ needs.detect.outputs.preview_run_id }}
+      state_suffix: ${{ inputs.state_suffix }}
+    secrets: inherit
+
+  envlevel2:
+    needs: [detect, envlevel0, envlevel1]
+    if: ${{ !failure() && !cancelled() && needs.detect.outputs.envlevel2_empty != 'true' && !contains(join(needs.*.result, ','), 'cancelled') }}
+    uses: ship-iac/shipmate/.github/workflows/apply-env-level.yml@6bd8f566ebddb8fcbb2c33dfd356c129e3b767dc
+    permissions: { contents: read, checks: write, actions: read }
+    with:
+      waves_json: ${{ needs.detect.outputs.envlevel2_waves }}
+      head_sha: ${{ needs.detect.outputs.head_sha }}
+      preview_run_id: ${{ needs.detect.outputs.preview_run_id }}
+      state_suffix: ${{ inputs.state_suffix }}
+    secrets: inherit
+
+  envlevel3:
+    needs: [detect, envlevel0, envlevel1, envlevel2]
+    if: ${{ !failure() && !cancelled() && needs.detect.outputs.envlevel3_empty != 'true' && !contains(join(needs.*.result, ','), 'cancelled') }}
+    uses: ship-iac/shipmate/.github/workflows/apply-env-level.yml@6bd8f566ebddb8fcbb2c33dfd356c129e3b767dc
+    permissions: { contents: read, checks: write, actions: read }
+    with:
+      waves_json: ${{ needs.detect.outputs.envlevel3_waves }}
+      head_sha: ${{ needs.detect.outputs.head_sha }}
+      preview_run_id: ${{ needs.detect.outputs.preview_run_id }}
+      state_suffix: ${{ inputs.state_suffix }}
+    secrets: inherit
+
+  summary:
+    needs: [detect, envlevel0, envlevel1, envlevel2, envlevel3]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions: { checks: write }
+    steps:
+      - name: Complete checkmate on the merged PR head SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ needs.detect.outputs.head_sha }}
+          RESULTS: ${{ join(needs.*.result, ',') }}
+        run: |
+          set -euo pipefail
+          # detect failed -> no head SHA -> do not post a (green) gate; fail loud instead.
+          if [ -z "$HEAD_SHA" ]; then
+            echo "::error::detect produced no head SHA; deploy cannot gate"; exit 1
+          fi
+          # Any env-level result other than success/skipped (failure, cancelled,
+          # timed_out, ...) blocks the gate. grep -q failure alone missed cancels.
+          if echo "$RESULTS" | tr ',' '\n' | grep -qvE '^(success|skipped)$'; then
+            concl=failure; title="deploy incomplete";
+          else concl=success; title="all env-levels applied"; fi
+          python3 - "$HEAD_SHA" "$concl" "$title" > body.json <<'PY'
+          import json, sys
+          head, concl, title = sys.argv[1:4]
+          print(json.dumps({"name": "shipmate / checkmate", "head_sha": head,
+              "status": "completed", "conclusion": concl,
+              "output": {"title": title, "summary": "Deploy env-level applies completed."}}))
+          PY
+          gh api "repos/$GITHUB_REPOSITORY/check-runs" --input body.json >/dev/null
+      - name: Slack on failed deploy (outranks drift)
+        if: ${{ (contains(join(needs.*.result, ','), 'failure') || contains(join(needs.*.result, ','), 'cancelled')) && vars.SLACK_WEBHOOK != '' }}
+        env:
+          SLACK: ${{ vars.SLACK_WEBHOOK }}
+        run: |
+          set -euo pipefail
+          python3 -c "import json;open('p.json','w').write(json.dumps({'text':':rotating_light: shipmate deploy failed on main — a wave apply failed or was cancelled.'}))"
+          curl -sS -X POST -H 'Content-Type: application/json' --data @p.json "$SLACK" >/dev/null
