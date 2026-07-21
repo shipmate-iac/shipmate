@@ -97,10 +97,13 @@ require `shipmate / checkmate`; see [`docs/branch-protection.md`](docs/branch-pr
 ## Deploy + drift
 
 shipmate follows a **serverless plan→store→review→apply** model — the reviewed
-plan is stored and applied verbatim, with no server or database. `deploy.yml`
-and `drift.yml` are thin sample-repo workflows over shipmate actions.
+plan is stored and applied verbatim, with no server or database. A consumer's
+`deploy.yml` is a ~16-line wrapper over the engine's reusable deploy workflow
+(passing only its flavor's `state_suffix`); `drift.yml` is a thin sample-repo
+workflow over shipmate actions.
 
-- **`deploy.yml`** (`on: push main`) is the **exact-plan apply** path.
+- **`deploy.yml`** (`on: push main`, engine reusable
+  `.github/workflows/deploy.yml`) is the **exact-plan apply** path.
   `actions/deploy-detect` maps the merge commit → its PR head SHA, takes the
   stacks whose `apply / <env> / <stack>` check is still **pending**, and orders
   them into **waves** (`scripts/waves` = topological levels of the Terramate
