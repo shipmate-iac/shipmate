@@ -32,7 +32,7 @@ jobs:
           terramate-version: ${{ vars.TERRAMATE_VERSION }}
           tofu-version: ${{ vars.TOFU_VERSION }}
       - id: d
-        uses: ship-iac/shipmate/actions/apply-detect@30ea42bfbeaca73c76891dfed881ca5db2b1f410
+        uses: ship-iac/shipmate/actions/apply-detect@5cca773f540eda646b9de9e2c9fbda43e461fc63
         with:
           environment: ${{ inputs.environment }}
           plan-run-id: ${{ inputs.plan_run_id }}
@@ -45,7 +45,7 @@ jobs:
   apply:
     needs: [detect]
     if: ${{ !failure() && !cancelled() && needs.detect.outputs.empty != 'true' }}
-    uses: ship-iac/shipmate/.github/workflows/apply-env-level.yml@30ea42bfbeaca73c76891dfed881ca5db2b1f410
+    uses: ship-iac/shipmate/.github/workflows/apply-env-level.yml@0ebf3b61375da006709dbdbfa15a5ee92893586b
     permissions: { contents: read, checks: write, actions: read }
     with:
       waves_json: ${{ needs.detect.outputs.waves }}
@@ -68,7 +68,7 @@ jobs:
     steps:
       - name: Complete gate if every apply check is done
         id: gate
-        uses: ship-iac/shipmate/actions/gate-refresh@30ea42bfbeaca73c76891dfed881ca5db2b1f410
+        uses: ship-iac/shipmate/actions/gate-refresh@5cca773f540eda646b9de9e2c9fbda43e461fc63
         with:
           head-sha: ${{ inputs.ref }}
           github-token: ${{ github.token }}
