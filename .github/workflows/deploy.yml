@@ -26,7 +26,7 @@ jobs:
       envlevel2_empty: ${{ steps.d.outputs.envlevel2_empty }}
       envlevel3_empty: ${{ steps.d.outputs.envlevel3_empty }}
       head_sha: ${{ steps.d.outputs.head_sha }}
-      preview_run_id: ${{ steps.d.outputs.preview_run_id }}
+      plan_run_id: ${{ steps.d.outputs.plan_run_id }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with: { fetch-depth: 0 }
@@ -50,7 +50,7 @@ jobs:
     with:
       waves_json: ${{ needs.detect.outputs.envlevel0_waves }}
       head_sha: ${{ needs.detect.outputs.head_sha }}
-      preview_run_id: ${{ needs.detect.outputs.preview_run_id }}
+      plan_run_id: ${{ needs.detect.outputs.plan_run_id }}
       state_suffix: ${{ inputs.state_suffix }}
     # `inherit`, not an explicit `secrets:` mapping: apply-env-level.yml is pinned
     # by SHA, and in the window before the post-merge pin bump that pinned revision
@@ -68,7 +68,7 @@ jobs:
     with:
       waves_json: ${{ needs.detect.outputs.envlevel1_waves }}
       head_sha: ${{ needs.detect.outputs.head_sha }}
-      preview_run_id: ${{ needs.detect.outputs.preview_run_id }}
+      plan_run_id: ${{ needs.detect.outputs.plan_run_id }}
       state_suffix: ${{ inputs.state_suffix }}
     secrets: inherit
 
@@ -80,7 +80,7 @@ jobs:
     with:
       waves_json: ${{ needs.detect.outputs.envlevel2_waves }}
       head_sha: ${{ needs.detect.outputs.head_sha }}
-      preview_run_id: ${{ needs.detect.outputs.preview_run_id }}
+      plan_run_id: ${{ needs.detect.outputs.plan_run_id }}
       state_suffix: ${{ inputs.state_suffix }}
     secrets: inherit
 
@@ -92,7 +92,7 @@ jobs:
     with:
       waves_json: ${{ needs.detect.outputs.envlevel3_waves }}
       head_sha: ${{ needs.detect.outputs.head_sha }}
-      preview_run_id: ${{ needs.detect.outputs.preview_run_id }}
+      plan_run_id: ${{ needs.detect.outputs.plan_run_id }}
       state_suffix: ${{ inputs.state_suffix }}
     secrets: inherit
 
@@ -102,7 +102,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions: { checks: write }
     steps:
-      - name: Complete checkmate on the merged PR head SHA
+      - name: Complete gate on the merged PR head SHA
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ needs.detect.outputs.head_sha }}
@@ -121,7 +121,7 @@ jobs:
           python3 - "$HEAD_SHA" "$concl" "$title" > body.json <<'PY'
           import json, sys
           head, concl, title = sys.argv[1:4]
-          print(json.dumps({"name": "shipmate / checkmate", "head_sha": head,
+          print(json.dumps({"name": "shipmate / gate", "head_sha": head,
               "status": "completed", "conclusion": concl,
               "output": {"title": title, "summary": "Deploy env-level applies completed."}}))
           PY

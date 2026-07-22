@@ -1,8 +1,8 @@
-name: shipmate checkmate-refresh
-description: Complete the shipmate / checkmate gate on a PR head once every apply check is done (pre-merge applies).
+name: shipmate gate-refresh
+description: Complete the shipmate / gate check on a PR head once every apply check is done (pre-merge applies).
 inputs:
   head-sha:
-    description: PR head SHA carrying the apply checks and the checkmate gate.
+    description: PR head SHA carrying the apply checks and the gate.
     required: true
   github-token:
     description: 'GITHUB_TOKEN with checks:write.'
@@ -30,7 +30,7 @@ runs:
           "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/check-runs?filter=all&per_page=100" \
           --jq '.check_runs[] | {name, status, conclusion, started_at, id}' \
           | python3 "$GITHUB_ACTION_PATH/../../scripts/apply-gate"
-    - name: Complete checkmate
+    - name: Complete gate
       if: ${{ steps.scan.outputs.verdict == 'complete' }}
       shell: bash
       env:
@@ -40,7 +40,7 @@ runs:
         set -euo pipefail
         python3 - "$HEAD_SHA" > gate.json <<'PY'
         import json, sys
-        print(json.dumps({"name": "shipmate / checkmate", "head_sha": sys.argv[1],
+        print(json.dumps({"name": "shipmate / gate", "head_sha": sys.argv[1],
             "status": "completed", "conclusion": "success",
             "output": {"title": "all applies complete",
                        "summary": "Every apply / <env> / <stack> check for this "

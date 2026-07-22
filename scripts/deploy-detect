@@ -96,21 +96,21 @@ def main():
     eo.guard_max_env_levels(levels)
     per_level = eo.waves_by_env_level(pending, deps, levels)
     runs = _gh_json(
-        f"repos/{repo}/actions/workflows/preview.yml/runs?head_sha={head}&status=success"
+        f"repos/{repo}/actions/workflows/plan.yml/runs?head_sha={head}&status=success"
     ).get("workflow_runs", [])
-    preview_run = runs[0]["id"] if runs else ""
+    plan_run = runs[0]["id"] if runs else ""
     level_counts = [sum(len(waves[f"wave{i}"]) for i in range(wv.MAX_WAVES)) for waves in per_level]
     print(
         f"::notice title=deploy-detect::base={os.environ.get('SHIPMATE_BASE_SHA', '')} "
         f"head={head} cells={len(cells)} completed={len(completed)} pending={len(pending)} "
-        f"envlevels={level_counts} preview_run={preview_run} empty={not any(level_counts)}"
+        f"envlevels={level_counts} plan_run={plan_run} empty={not any(level_counts)}"
     )
     # Output names must be hyphen-free: `steps.d.outputs.head-sha` parses the '-'
     # as subtraction, breaking the composite action's outputs block. Underscores.
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
         eo.write_env_level_waves(fh, per_level)
         fh.write(f"head_sha={head}\n")
-        fh.write(f"preview_run_id={preview_run}\n")
+        fh.write(f"plan_run_id={plan_run}\n")
 
 
 if __name__ == "__main__":

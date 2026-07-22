@@ -42,7 +42,7 @@ protection rules stay simple even as the number of underlying units grows.
 ## Comment-ops
 
 Humans drive apply behavior for a pull request through PR comments —
-`mate apply <env>` — rather than through bespoke UI or external tooling.
+`shipmate apply <env>` — rather than through bespoke UI or external tooling.
 A private GitHub App mints the short-lived token needed to dispatch the apply
 workflow from a comment (events created with the default `GITHUB_TOKEN` never
 trigger other workflows); the App itself has no `checks` or `issues`
@@ -63,9 +63,9 @@ tag the relevant stacks), never a workflow code change. This keeps the
 number of environments a repository supports independent of the complexity
 of its CI configuration.
 
-## Preview
+## Plan
 
-The `preview.yml` workflow (thin and identical across repo layouts; see the
+The `plan.yml` workflow (thin and identical across repo layouts; see the
 `repo-example-*` samples) runs on every pull request:
 
 - **`detect`** — `terramate fmt --check`, a stale-codegen check
@@ -81,18 +81,18 @@ The `preview.yml` workflow (thin and identical across repo layouts; see the
   artifact, and creates the `apply / <env> / <stack>` check **pending** (or
   completed "no changes").
 - **`summary`** — `actions/summary` upserts one sticky PR comment (a stack ×
-  env table) and creates/refreshes the aggregate **`shipmate / checkmate`**
-  gate check, which stays non-green while any apply is pending or any plan
+  env table) and creates/refreshes the aggregate **`shipmate / gate`**
+  check, which stays non-green while any apply is pending or any plan
   cell failed.
 
 Note on plan output: plan text lives in each `plan / <env> / <stack>` job's
 **Summary**, not in a separate Checks-API check-run — the matrix job already
 emits the check of that name, so a second API check would duplicate it. The
-`apply` and `checkmate` checks *are* API check-runs (created pending; they
-have no backing job in `preview.yml`).
+`apply` and `gate` checks *are* API check-runs (created pending; they
+have no backing job in `plan.yml`).
 
 To make the gate enforce apply-before-merge, configure branch protection to
-require `shipmate / checkmate`; see [`docs/branch-protection.md`](docs/branch-protection.md).
+require `shipmate / gate`; see [`docs/branch-protection.md`](docs/branch-protection.md).
 
 ## Deploy + drift
 
@@ -110,7 +110,7 @@ workflow over shipmate actions.
   `after` DAG). Pre-declared `wave0..wave7` jobs each `needs` the previous; the
   skip-propagation guard (`if: !failure() && !cancelled() && waveN != '[]'`)
   lets empty middle waves pass through without blocking successors.
-  `actions/apply-cell` downloads the reviewed `.otplan` from the preview run,
+  `actions/apply-cell` downloads the reviewed `.otplan` from the plan run,
   verifies the fingerprint, applies **that exact plan** (never re-plans; stale
   state → fail-safe), and completes the apply check. A stack already applied
   (pre-merge, or a no-change re-plan) has a completed check → deploy
@@ -127,7 +127,7 @@ workflow over shipmate actions.
 One model note vs a hosted service: with no server-side queue, GHA can drop a
 **superseded** deploy run — its stacks stay pending + visible and are recovered
 by re-running that deploy. The manual **pre-merge** exact-plan apply
-(`mate apply <env>` in a PR comment) shares the same exact-plan `apply-cell`
+(`shipmate apply <env>` in a PR comment) shares the same exact-plan `apply-cell`
 path and the same per-env, per-stack concurrency group as `deploy.yml`, so a
 comment-triggered apply and a post-merge deploy can never race against the
 same stack × environment; see Comment-ops above and `CONTRACT.md`.

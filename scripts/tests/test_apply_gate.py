@@ -62,7 +62,7 @@ def test_neutral_no_change_apply_counts_as_done():
 
 
 def test_latest_run_per_name_wins():
-    # A re-created check (e.g. preview rerun superseding an older pending one)
+    # A re-created check (e.g. plan rerun superseding an older pending one)
     # must be judged by its newest run, picked by check-run id (creation order).
     runs = [
         _run(
@@ -106,7 +106,7 @@ def test_stale_completed_run_does_not_mask_newer_pending():
 def test_non_apply_checks_ignored():
     runs = [
         _run("plan / dev-eu / stacks/app", "completed", "success"),
-        _run("shipmate / checkmate", "queued", None),
+        _run("shipmate / gate", "queued", None),
         _run("apply / dev-eu / stacks/app", "completed", "success"),
     ]
     assert ag.verdict(runs) == "complete"

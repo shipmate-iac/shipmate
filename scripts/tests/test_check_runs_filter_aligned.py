@@ -20,7 +20,7 @@ def _sources():
 
 def test_every_check_runs_query_uses_filter_all():
     # A commit's check-runs *listing* (`.../check-runs?...`) must use filter=all so
-    # the gate (checkmate-refresh) and the detects judge the identical run set per
+    # the gate (gate-refresh) and the detects judge the identical run set per
     # name — coupling row 9 (apply "done" predicate). A POST-create (`/check-runs`
     # with no `?`) and a PATCH-by-id (`/check-runs/<id>`) are not listings and
     # correctly do not match the `/check-runs?` needle.

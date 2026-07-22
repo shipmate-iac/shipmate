@@ -13,8 +13,8 @@ inputs:
   head-sha:
     description: PR head SHA carrying the pending apply check.
     required: true
-  preview-run-id:
-    description: Preview run id holding the reviewed plan artifact.
+  plan-run-id:
+    description: Plan run id holding the reviewed plan artifact.
     required: true
   state-path:
     description: Flavor state path, e.g. stacks/app/.state.
@@ -44,21 +44,21 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
-        RUN_ID: ${{ inputs.preview-run-id }}
+        RUN_ID: ${{ inputs.plan-run-id }}
         ART: plan.${{ inputs.env }}.${{ steps.ids.outputs.slug }}
         ENV: ${{ inputs.env }}
         STACK_NAME: ${{ inputs.stack-name }}
       run: |
         set -euo pipefail
         if [ -z "$RUN_ID" ]; then
-          echo "::error::no successful preview run for this head SHA — no reviewed plan to apply for $ENV/$STACK_NAME. Re-run preview."
+          echo "::error::no successful plan run for this head SHA — no reviewed plan to apply for $ENV/$STACK_NAME. Re-run plan."
           exit 1
         fi
-        [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "::error::preview-run-id must be numeric (got: $RUN_ID)"; exit 1; }
+        [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "::error::plan-run-id must be numeric (got: $RUN_ID)"; exit 1; }
         echo "::group::download reviewed plan: $ART"
         if ! gh run download "$RUN_ID" -n "$ART" -D . ; then
           echo "::endgroup::"
-          echo "::error::reviewed plan artifact '$ART' missing/expired — cannot apply $ENV/$STACK_NAME without re-planning (fail-safe). Re-run preview."
+          echo "::error::reviewed plan artifact '$ART' missing/expired — cannot apply $ENV/$STACK_NAME without re-planning (fail-safe). Re-run plan."
           exit 1
         fi
         echo "::endgroup::"
@@ -99,8 +99,8 @@ runs:
         ENV: ${{ inputs.env }}
         STACK: ${{ inputs.stack }}
         HEAD_SHA: ${{ inputs.head-sha }}
-      # M6: record the apply-check ids that exist for this (env, stack) BEFORE
-      # the apply runs. The completion step marks only these done, so a preview
+      # Record the apply-check ids that exist for this (env, stack) BEFORE
+      # the apply runs. The completion step marks only these done, so a plan
       # re-run that creates a fresh duplicate apply check mid-apply is left
       # pending (its plan was never applied by this run) instead of being greened.
       # filter=all sees every pre-existing duplicate; writing to RUNNER_TEMP keeps
@@ -174,7 +174,7 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
-      # Complete ONLY the ids snapshotted before the apply (see M6 note above):
+      # Complete ONLY the ids snapshotted before the apply (see the snapshot note above):
       # a duplicate apply check created mid-apply is not in the snapshot and stays
       # pending. The body is static (no author input) so it is a plain heredoc.
       run: |

@@ -28,7 +28,7 @@ jobs:
       envlevel2_empty: ${{ steps.d.outputs.envlevel2_empty }}
       envlevel3_empty: ${{ steps.d.outputs.envlevel3_empty }}
       head_sha: ${{ steps.d.outputs.head_sha }}
-      preview_run_id: ${{ steps.d.outputs.preview_run_id }}
+      plan_run_id: ${{ steps.d.outputs.plan_run_id }}
       excluded_envs: ${{ steps.d.outputs.excluded_envs }}
       skipped_envs: ${{ steps.d.outputs.skipped_envs }}
     steps:
@@ -53,7 +53,7 @@ jobs:
     with:
       waves_json: ${{ needs.detect.outputs.envlevel0_waves }}
       head_sha: ${{ needs.detect.outputs.head_sha }}
-      preview_run_id: ${{ needs.detect.outputs.preview_run_id }}
+      plan_run_id: ${{ needs.detect.outputs.plan_run_id }}
       state_suffix: ${{ inputs.state_suffix }}
     # `inherit`, not an explicit `secrets:` mapping: apply-env-level.yml is pinned
     # by SHA, and in the window before the post-merge pin bump that pinned revision
@@ -71,7 +71,7 @@ jobs:
     with:
       waves_json: ${{ needs.detect.outputs.envlevel1_waves }}
       head_sha: ${{ needs.detect.outputs.head_sha }}
-      preview_run_id: ${{ needs.detect.outputs.preview_run_id }}
+      plan_run_id: ${{ needs.detect.outputs.plan_run_id }}
       state_suffix: ${{ inputs.state_suffix }}
     secrets: inherit
 
@@ -83,7 +83,7 @@ jobs:
     with:
       waves_json: ${{ needs.detect.outputs.envlevel2_waves }}
       head_sha: ${{ needs.detect.outputs.head_sha }}
-      preview_run_id: ${{ needs.detect.outputs.preview_run_id }}
+      plan_run_id: ${{ needs.detect.outputs.plan_run_id }}
       state_suffix: ${{ inputs.state_suffix }}
     secrets: inherit
 
@@ -95,7 +95,7 @@ jobs:
     with:
       waves_json: ${{ needs.detect.outputs.envlevel3_waves }}
       head_sha: ${{ needs.detect.outputs.head_sha }}
-      preview_run_id: ${{ needs.detect.outputs.preview_run_id }}
+      plan_run_id: ${{ needs.detect.outputs.plan_run_id }}
       state_suffix: ${{ inputs.state_suffix }}
     secrets: inherit
 
@@ -105,9 +105,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions: { checks: write }
     steps:
-      - name: Complete checkmate if every apply check is done
+      - name: Complete gate if every apply check is done
         id: gate
-        uses: ship-iac/shipmate/actions/checkmate-refresh@e4615d0df6cc11b8a3d248005d225d3c05a8a156
+        uses: ship-iac/shipmate/actions/gate-refresh@e4615d0df6cc11b8a3d248005d225d3c05a8a156
         with:
           head-sha: ${{ inputs.ref }}
           github-token: ${{ github.token }}
@@ -146,18 +146,18 @@ jobs:
           emoji, word, gate = sys.argv[1:4]
           excluded = json.loads(os.environ.get("EXCLUDED") or "[]")
           skipped = json.loads(os.environ.get("SKIPPED") or "[]")
-          parts = [f"{emoji} shipmate: `mate apply` (all environments) {word}."]
+          parts = [f"{emoji} shipmate: `shipmate apply` (all environments) {word}."]
           if excluded:
               envs = ", ".join(f"`{e}`" for e in excluded)
-              cmds = ", ".join(f"`mate apply {e}`" for e in excluded)
+              cmds = ", ".join(f"`shipmate apply {e}`" for e in excluded)
               parts.append(f"Explicit environment(s) left pending: {envs} — run {cmds} to apply them.")
           if skipped:
               envs = ", ".join(f"`{e}`" for e in skipped)
               parts.append(f"Skipped (ordered after an unapplied explicit environment): {envs}.")
           parts.append(
-              "`shipmate / checkmate` is complete — every environment is applied."
+              "`shipmate / gate` is complete — every environment is applied."
               if gate == "complete" else
-              "`shipmate / checkmate` stays pending until every environment is applied "
+              "`shipmate / gate` stays pending until every environment is applied "
               "(or the merge deploy runs)."
           )
           print(json.dumps({"body": " ".join(parts)}))

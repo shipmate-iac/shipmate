@@ -26,29 +26,29 @@ reconstruct the identical name from the one value they share.
 In addition to the per-unit checks, one aggregate check rolls up the full
 fan-out into a single required status, named verbatim:
 
-- `shipmate / checkmate`
+- `shipmate / gate`
 
-Branch protection rules should require `shipmate / checkmate`, not the
+Branch protection rules should require `shipmate / gate`, not the
 individual per-unit checks, so that the set of required checks does not
 need to be edited every time a stack or environment is added or removed.
 
-`shipmate / checkmate` is created (and refreshed on every preview) by the
+`shipmate / gate` is created (and refreshed on every plan run) by the
 `summary` action, and is completed to success by whichever of these happens
 first:
 
-- the pre-merge apply path (`checkmate-refresh`, called from the apply
+- the pre-merge apply path (`gate-refresh`, called from the apply
   workflow's summary job) once **every** `apply / <env> / <stack>` check on
-  the PR head is complete — a targeted `mate apply <env>` of only some
+  the PR head is complete — a targeted `shipmate apply <env>` of only some
   environments leaves the gate pending;
 - the post-merge deploy, which completes the gate on the merged PR's head
   SHA after its env-level applies finish.
 
 When apply-cell completes an `apply / <env> / <stack>` check, it completes only
 the check-run ids that already existed for that name **before its apply began**.
-A preview re-run can create a fresh duplicate apply check; a duplicate created
+A plan re-run can create a fresh duplicate apply check; a duplicate created
 *mid-apply* is therefore left pending (its plan was not applied by this run),
 while duplicates that predate the apply are all completed so the gate never
-sticks. This keeps `shipmate / checkmate` from greening on a plan the apply
+sticks. This keeps `shipmate / gate` from greening on a plan the apply
 never used.
 
 ## Env model
@@ -110,39 +110,42 @@ when the same stack participates in more than one environment.
 
 ## Comment-ops
 
-`mate <verb> [env] [tag-filter]` in a PR comment drives a manual, pre-merge
+`shipmate <verb> [env] [tag-filter]` in a PR comment drives a manual, pre-merge
 apply. The grammar is strict and anchored — the whole comment line must match
 one regex, and the parsed values are never interpolated into a shell. `apply`
 is the only active verb; `plan` and `destroy` are reserved (recognized and
 rejected with a "reserved" message) so the grammar does not need to change
 shape when those verbs are implemented.
 
-The env is optional for `apply`. A targeted `mate apply <env>` applies one
-environment; a bare `mate apply` applies **every** environment that has a
+The env is optional for `apply`. A targeted `shipmate apply <env>` applies one
+environment; a bare `shipmate apply` applies **every** environment that has a
 reviewed plan for the current PR head, in `env_order` env-levels (see Env
 apply order, below), **except** environments listed in the Terramate global
 `global.shipmate.explicit_envs`. Explicit environments (typically production)
 must always be named: their `apply / <env> / <stack>` checks simply stay
-pending under a bare apply — so `shipmate / checkmate` keeps gating the
-merge — until someone runs `mate apply <env>` for them. An absent global (or
-`[]`) means a bare apply targets everything. Malformed `explicit_envs` shapes
-(not a list of strings) fail loud, like `env_order`.
+pending under a bare apply — so `shipmate / gate` keeps gating the
+merge — until someone runs `shipmate apply <env>` for them. An absent global
+(or `[]`) means a bare apply targets everything. Malformed `explicit_envs`
+shapes (not a list of strings) fail loud, like `env_order`.
 
-A parsed `mate apply <env>` command is authorized only when **all** of the
-following hold, checked in order, each with its own actionable rejection
-reason:
+A parsed `shipmate apply <env>` command is authorized only when it satisfies
+**apply requirements** — named, Atlantis-style, checked in order, each with
+its own actionable rejection reason:
 
-- the commenter is a member of the configured approvers team (checked via a
-  short-lived GitHub App installation token, `members:read`);
-- the pull request is mergeable;
-- the pull request has an approving review outstanding (the latest review per
-  reviewer wins; any `CHANGES_REQUESTED` blocks);
-- a reviewed plan exists for the pull request's **current** head SHA (the
-  most recent successful preview run whose head matches; a plan for an older
-  head means new commits landed since — stale, re-plan required).
+- **shipmate team**: the commenter is a member of the configured approvers
+  team (checked via a short-lived GitHub App installation token,
+  `members:read`);
+- **mergeable**: the pull request is mergeable;
+- **approved**: the pull request has an approving review outstanding (the
+  latest review per reviewer wins; any `CHANGES_REQUESTED` blocks);
+- **undiverged**: a reviewed plan exists for the pull request's **current**
+  head SHA (the most recent successful plan run — the automatic plan run on
+  pull-request open, autoplan — whose head matches; a plan for an older head
+  means new commits landed since — stale, re-plan required).
 
-A bare `mate apply` is authorized exactly once, by the same four checks — one
-authorization decision covers the whole multi-environment run. Both forms
+A bare `shipmate apply` is authorized exactly once, by the same four apply
+requirements — one authorization decision covers the whole multi-environment
+run. Both forms
 dispatch the consumer's single `apply.yml` wrapper; its optional `environment`
 input selects the path (set → targeted, empty → bare). Both share the same
 App-minted `workflow_dispatch` mechanism and the same per-env
@@ -161,7 +164,7 @@ and every workflow in a repo shares the `github-actions` identity, so keeping
 check writes on `GITHUB_TOKEN` keeps that identity consistent across the
 pre-merge and post-merge paths.
 
-`mate apply` and `deploy.yml` share the same per-env, per-stack
+`shipmate apply` and `deploy.yml` share the same per-env, per-stack
 `apply-<env>-<stack>` concurrency group, so exactly one apply ever runs
 against a given stack × environment at a time, regardless of whether it was
 triggered by a pre-merge comment or a post-merge push.
@@ -234,21 +237,21 @@ in apply-detect (rename so the path→`-` slug is unique).
 
 This naming contract is breaking for any in-flight plan artifacts: land the
 change when no applies are mid-flight. It also spans two consumer workflow
-files pinned independently — `preview.yml` pins `plan-cell` (the uploader) and
+files pinned independently — `plan.yml` pins `plan-cell` (the uploader) and
 `apply.yml` pins the engine's reusable apply workflows, which pin
 `apply-cell`/`apply-detect` (the downloader/matcher) internally. Bump both
 pins **together** when adopting a build that changes this name: a partial
 bump (uploader on the new name, downloader on the old, or vice versa) makes
 every apply fail its reviewed-plan download fail-safe until the pins agree.
 
-## Preview comment
+## Plan comment
 
 The `summary` action maintains exactly one sticky comment per pull request,
 identified by the HTML marker written verbatim as the comment's first line:
 
 - `<!-- shipmate:summary -->`
 
-The comment is edited in place on every preview run (comment lookup is
+The comment is edited in place on every plan run (comment lookup is
 marker + `github-actions[bot]` author), so GitHub's comment revision history
 doubles as the audit trail of previous plans for the PR.
 
@@ -286,7 +289,7 @@ with the glob pattern `cell-summary.*`. It contains verbatim:
 - `plan.txt` — the `tofu show -no-color` rendering of the reviewed plan.
 
 `plan-cell` (writer) and `summary` (reader) are pinned by the same SHA in a
-consumer's `preview.yml`, so the schema upgrades atomically; the summary
+consumer's `plan.yml`, so the schema upgrades atomically; the summary
 fails loud on a `cell.json` missing schema keys rather than rendering around
 pin skew.
 
@@ -310,7 +313,7 @@ variable **names** only — never values.
 
 The reviewed machine plan file (`stack.otplan`) can be encrypted at rest in the
 uploaded artifact. When the consumer sets the optional `plan-passphrase` input
-on `plan-cell` (in `preview.yml`), the engine encrypts the plan before upload
+on `plan-cell` (in `plan.yml`), the engine encrypts the plan before upload
 using a single symmetric cipher: `openssl enc -aes-256-ctr -pbkdf2 -salt`,
 passphrase supplied via `-pass env:` (never on the command line). `apply-cell`
 decrypts it after download on **every** apply path: all three paths pass it
@@ -339,7 +342,7 @@ workflows.
   rendered output; encryption alone does not hide them from anyone who can read
   the PR or download the `cell-summary` artifact.
 - **Both sides must agree.** `plan-cell` (encrypt) and `apply-cell` (decrypt) are
-  pinned independently (`preview.yml` vs `apply.yml`); the passphrase and the
+  pinned independently (`plan.yml` vs `apply.yml`); the passphrase and the
   engine SHA must match on both. A mismatch surfaces as the fail-safe above, not
   a silent wrong apply.
 
@@ -357,7 +360,7 @@ incompatible with that model; the engine disables it and keeps the rest:
 | `git-out-of-sync` | **disabled** | shipmate applies a chosen reviewed SHA that is legitimately behind `main`; remote-freshness is the wrong assertion for the exact-plan model. |
 | `git-untracked` | kept | A genuinely unexpected untracked file must still block. shipmate's own artifacts are gitignored (below). |
 | `git-uncommitted` | kept | A real dirty tree must block; gitignored artifacts are not tracked-file changes. |
-| `outdated-code` | kept | Catches hand-edited / stale generated `.tf`, complementing the preview codegen check. |
+| `outdated-code` | kept | Catches hand-edited / stale generated `.tf`, complementing the plan codegen check. |
 
 **Mechanism (engine-controlled).** The three `terramate script run` sites —
 `plan-cell`, `apply-cell`, `drift-cell` — pass `--disable-safeguards=git-out-of-sync`
@@ -399,10 +402,10 @@ downstream environments are not touched until it is fixed and re-run.
 `MAX_ENV_LEVELS` is `4`; an env-order graph that would span more levels than
 that fails loud rather than silently truncating.
 
-Targeted applies (`mate apply <env>`) act on a single environment and skip
+Targeted applies (`shipmate apply <env>`) act on a single environment and skip
 env-level ordering entirely — there is nothing to order across.
 
-A bare `mate apply` is the pre-merge equivalent of the merge-deploy path: it
+A bare `shipmate apply` is the pre-merge equivalent of the merge-deploy path: it
 buckets the pending applies of every non-explicit environment into the same
 env-levels and applies level 0 fully before level 1, with the same
 failure-skips-successor-levels rule. An environment excluded as explicit
@@ -410,7 +413,7 @@ keeps its position in the order: environments that do not depend on it run
 normally at their own level, while environments ordered (transitively) after
 an unapplied explicit environment are skipped with a notice — their ordering
 precondition cannot be met in that run, exactly like a failed predecessor
-level. Completed cells skip idempotently, so re-commenting `mate apply`
+level. Completed cells skip idempotently, so re-commenting `shipmate apply`
 resumes where the previous run stopped.
 
 The engine ships this as a reusable, parameterized workflow
@@ -421,11 +424,11 @@ stack-wave by stack-wave exactly as described above (see Fan-out).
 
 The engine ships the merge-deploy path as the reusable workflow
 `.github/workflows/deploy.yml` (deploy-detect → env-levels 0..3 via
-`apply-env-level.yml` → checkmate completion + optional Slack notify), the
+`apply-env-level.yml` → gate completion + optional Slack notify), the
 bare-apply path as `.github/workflows/apply-all.yml` (detect → env-levels
-0..3 via `apply-env-level.yml` → checkmate refresh + result comment), and the
+0..3 via `apply-env-level.yml` → gate refresh + result comment), and the
 targeted path as `.github/workflows/apply.yml` (single-env detect → one
-`apply-env-level.yml` call → checkmate refresh + result comment). A
+`apply-env-level.yml` call → gate refresh + result comment). A
 consuming repo carries two thin wrappers: `deploy.yml` (`on: push` to the
 default branch; passes only its flavor's `state_suffix`) and `apply.yml`
 (`workflow_dispatch`; its optional `environment` input routes to the targeted

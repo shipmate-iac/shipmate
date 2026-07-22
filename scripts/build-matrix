@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compute the preview plan matrix: changed stacks x their env tags -> cells.
+"""Compute the plan matrix: changed stacks x their env tags -> cells.
 
 Pure core (build_matrix) is unit-tested; main() gathers inputs from terramate
 (the changed stack set + each stack's tags) and writes GitHub Actions job
@@ -82,13 +82,13 @@ def env_membership(all_stacks=False, base="", require_env_tag=True):
     """({env: [stacks...]}, {stack: [tags...]}) from Terramate tags (CONTRACT
     tag grammar: env/<name>).
 
-    `require_env_tag` (default True) is the preview/deploy fan-out posture: a
+    `require_env_tag` (default True) is the plan/deploy fan-out posture: a
     stack with no env/* tag fails loud, because there it would contribute no
     cells and silently vanish from the matrix. The artifact-sourced bare-apply
     path passes False -- an untagged stack produces no `plan.<env>.<slug>`
     artifact and so contributes no cell regardless, and an unrelated untagged
     stack anywhere else in the repo must not abort the apply (the targeted
-    `mate apply <env>` path never tag-validates either)."""
+    `shipmate apply <env>` path never tag-validates either)."""
     stacks = _list_stacks(all_stacks, base)
     tags_by_stack = {s: _tags(s) for s in stacks}
     if require_env_tag:

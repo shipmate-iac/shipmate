@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""apply-all.yml detect: the bare `mate apply` work set -> env-levels -> waves.
+"""apply-all.yml detect: the bare `shipmate apply` work set -> env-levels -> waves.
 
 The pre-merge equivalent of deploy-detect, sourced like apply-detect: cells
-come from the reviewed plan artifacts of ONE verified preview run (never a
+come from the reviewed plan artifacts of ONE verified plan run (never a
 re-plan), the pending `apply / <env> / <stack>` checks are the work queue, and
 `global.shipmate.env_order` buckets pending cells into env-levels exactly as
 on the merge-deploy path. Env membership comes from stack tags
@@ -12,8 +12,8 @@ constructed forward, never reverse-parsed.
 Two exclusions distinguish the bare form from deploy:
 - envs listed in `global.shipmate.explicit_envs` (typically prod) are removed
   before env-levels are built; their apply checks simply stay pending, so
-  `shipmate / checkmate` keeps gating the merge until a targeted
-  `mate apply <env>` completes them;
+  `shipmate / gate` keeps gating the merge until a targeted
+  `shipmate apply <env>` completes them;
 - envs ordered (transitively) after an unapplied explicit env are skipped
   with a notice — their ordering precondition cannot be met this run,
   exactly like a failed predecessor level.
@@ -112,7 +112,7 @@ def main():
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
         eo.write_env_level_waves(fh, per_level)
         fh.write(f"head_sha={head}\n")
-        fh.write(f"preview_run_id={plan_run_id}\n")
+        fh.write(f"plan_run_id={plan_run_id}\n")
         fh.write(f"excluded_envs={json.dumps(excluded)}\n")
         fh.write(f"skipped_envs={json.dumps(skipped)}\n")
 
