@@ -23,7 +23,7 @@ jobs:
       waves: ${{ steps.d.outputs.waves }}
       empty: ${{ steps.d.outputs.empty }}
       head_sha: ${{ steps.d.outputs.head_sha }}
-      preview_run_id: ${{ steps.d.outputs.preview_run_id }}
+      plan_run_id: ${{ steps.d.outputs.plan_run_id }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with: { fetch-depth: 0, ref: "${{ inputs.ref }}" }
@@ -50,7 +50,7 @@ jobs:
     with:
       waves_json: ${{ needs.detect.outputs.waves }}
       head_sha: ${{ needs.detect.outputs.head_sha }}
-      preview_run_id: ${{ needs.detect.outputs.preview_run_id }}
+      plan_run_id: ${{ needs.detect.outputs.plan_run_id }}
       state_suffix: ${{ inputs.state_suffix }}
     # `inherit`, not an explicit `secrets:` mapping: apply-env-level.yml is pinned
     # by SHA, and in the window before the post-merge pin bump that pinned revision

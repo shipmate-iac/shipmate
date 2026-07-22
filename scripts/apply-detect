@@ -191,7 +191,7 @@ def main():
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
         wv.write_waves(fh, waves)
         fh.write(f"head_sha={head}\n")
-        fh.write(f"preview_run_id={plan_run_id}\n")
+        fh.write(f"plan_run_id={plan_run_id}\n")
 
 
 if __name__ == "__main__":

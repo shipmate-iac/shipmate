@@ -25,7 +25,7 @@ outputs:
   waves: { description: "All waves as one JSON object {wave0..wave7} (apply-env-level.yml waves_json shape)", value: "${{ steps.d.outputs.waves }}" }
   empty: { description: true when no cell is pending, value: "${{ steps.d.outputs.empty }}" }
   head_sha: { description: Echoed head SHA, value: "${{ steps.d.outputs.head_sha }}" }
-  preview_run_id: { description: Echoed plan run id, value: "${{ steps.d.outputs.preview_run_id }}" }
+  plan_run_id: { description: Echoed plan run id, value: "${{ steps.d.outputs.plan_run_id }}" }
 runs:
   using: composite
   steps:

@@ -92,3 +92,18 @@ incomplete") when a plan cell fails, and `success` when nothing is left to
 apply. shipmate's responsibility — producing a correct, stable, single
 required status — holds regardless of plan; the ruleset above just enforces it
 once the repo is public or on a paid plan.
+
+## Upgrading
+
+- **Required status check renamed.** If your branch protection currently
+  requires the aggregate gate check under its pre-rename name, update it to
+  require `shipmate / gate` instead — in the **same change** that bumps your
+  pinned engine SHA. Otherwise GitHub keeps waiting on the old required check
+  forever, and PRs can't merge even though the new engine is reporting
+  `shipmate / gate`.
+- **Plan workflow renamed `preview.yml` → `plan.yml`.** shipmate resolves a
+  PR's reviewed plan by the workflow filename that produced it. A PR whose
+  plan was produced by an old `preview.yml` run is not recognized after your
+  workflow is renamed to `plan.yml` — push a commit to trigger a fresh
+  `plan.yml` run and get it re-reviewed before `shipmate apply` or a
+  merge-deploy will act on that PR.
