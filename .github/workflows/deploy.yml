@@ -28,7 +28,7 @@ jobs:
       head_sha: ${{ steps.d.outputs.head_sha }}
       plan_run_id: ${{ steps.d.outputs.plan_run_id }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0 }
       - uses: ship-iac/shipmate/actions/setup@6bd8f566ebddb8fcbb2c33dfd356c129e3b767dc
         with:
