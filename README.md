@@ -63,9 +63,9 @@ tag the relevant stacks), never a workflow code change. This keeps the
 number of environments a repository supports independent of the complexity
 of its CI configuration.
 
-## Preview
+## Plan
 
-The `preview.yml` workflow (thin and identical across repo layouts; see the
+The `plan.yml` workflow (thin and identical across repo layouts; see the
 `repo-example-*` samples) runs on every pull request:
 
 - **`detect`** — `terramate fmt --check`, a stale-codegen check
@@ -89,7 +89,7 @@ Note on plan output: plan text lives in each `plan / <env> / <stack>` job's
 **Summary**, not in a separate Checks-API check-run — the matrix job already
 emits the check of that name, so a second API check would duplicate it. The
 `apply` and `gate` checks *are* API check-runs (created pending; they
-have no backing job in `preview.yml`).
+have no backing job in `plan.yml`).
 
 To make the gate enforce apply-before-merge, configure branch protection to
 require `shipmate / gate`; see [`docs/branch-protection.md`](docs/branch-protection.md).
@@ -110,7 +110,7 @@ workflow over shipmate actions.
   `after` DAG). Pre-declared `wave0..wave7` jobs each `needs` the previous; the
   skip-propagation guard (`if: !failure() && !cancelled() && waveN != '[]'`)
   lets empty middle waves pass through without blocking successors.
-  `actions/apply-cell` downloads the reviewed `.otplan` from the preview run,
+  `actions/apply-cell` downloads the reviewed `.otplan` from the plan run,
   verifies the fingerprint, applies **that exact plan** (never re-plans; stale
   state → fail-safe), and completes the apply check. A stack already applied
   (pre-merge, or a no-change re-plan) has a completed check → deploy

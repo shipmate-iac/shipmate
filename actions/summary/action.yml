@@ -1,5 +1,5 @@
 name: shipmate summary
-description: Upsert the sticky preview comment and create/refresh the shipmate / gate check.
+description: Upsert the sticky plan comment and create/refresh the shipmate / gate check.
 inputs:
   pr-number:
     description: Pull request number.
@@ -82,12 +82,12 @@ runs:
         # Gate soundness: read the upstream job results, not just the cell artifacts.
         pr="$PLAN_RESULT"; dr="$DETECT_RESULT"
         if [ "$dr" != "success" ] || { [ "$pr" != "success" ] && [ "$pr" != "skipped" ]; }; then
-          status="completed"; conclusion="failure"; title="preview incomplete"
+          status="completed"; conclusion="failure"; title="plan incomplete"
           summary="detect or a plan cell did not succeed (detect=$dr, plan=$pr). Fix the failing plan / <env> / <stack> check before merging."
         elif [ "$pr" = "success" ] && [ "$CELL_COUNT" = "0" ]; then
           # Plan jobs ran (matrix was non-empty) but no cell summaries arrived —
           # an artifact-download failure must not resolve the gate green.
-          status="completed"; conclusion="failure"; title="preview incomplete"
+          status="completed"; conclusion="failure"; title="plan incomplete"
           summary="Plan jobs ran but produced no cell summaries (artifact download issue). Re-run before merging."
         elif [ "$PENDING" = "true" ]; then
           status="queued"; conclusion=""; title="apply pending"

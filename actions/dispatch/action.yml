@@ -18,7 +18,7 @@ inputs:
     description: PR number the apply belongs to.
     required: true
   plan-run-id:
-    description: Preview run id holding the reviewed plan artifacts.
+    description: Plan run id holding the reviewed plan artifacts.
     required: true
   workflow:
     description: Workflow file to dispatch. Default apply.yml (the merged wrapper); set explicitly for a split apply.yml/apply-all.yml consumer layout.

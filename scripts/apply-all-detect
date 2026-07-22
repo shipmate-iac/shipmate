@@ -2,7 +2,7 @@
 """apply-all.yml detect: the bare `shipmate apply` work set -> env-levels -> waves.
 
 The pre-merge equivalent of deploy-detect, sourced like apply-detect: cells
-come from the reviewed plan artifacts of ONE verified preview run (never a
+come from the reviewed plan artifacts of ONE verified plan run (never a
 re-plan), the pending `apply / <env> / <stack>` checks are the work queue, and
 `global.shipmate.env_order` buckets pending cells into env-levels exactly as
 on the merge-deploy path. Env membership comes from stack tags

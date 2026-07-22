@@ -83,7 +83,7 @@ def test_compute_cells_fans_out_multi_env(monkeypatch):
 
 
 def test_compute_cells_raises_on_untagged_stack(monkeypatch):
-    # A stack with no env/* tag would silently vanish from preview/apply/drift
+    # A stack with no env/* tag would silently vanish from plan/apply/drift
     # -- compute_cells must fail loud instead (scripts/build-matrix lines ~76-84).
     monkeypatch.setattr(
         bm, "_list_stacks", lambda all_stacks, base: ["stacks/app", "stacks/orphan"]

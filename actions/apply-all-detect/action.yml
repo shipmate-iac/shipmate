@@ -1,8 +1,8 @@
 name: shipmate apply-all-detect
-description: Compute the bare `shipmate apply` work set (all non-explicit envs, from a preview run's plan artifacts), bucket it into env-levels, and wave-order each level. Skips already-applied cells; explicit envs stay pending.
+description: Compute the bare `shipmate apply` work set (all non-explicit envs, from a plan run's plan artifacts), bucket it into env-levels, and wave-order each level. Skips already-applied cells; explicit envs stay pending.
 inputs:
   plan-run-id:
-    description: Preview run id holding the reviewed plan artifacts.
+    description: Plan run id holding the reviewed plan artifacts.
     required: true
   head-sha:
     description: PR head SHA carrying the pending apply checks.

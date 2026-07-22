@@ -1,11 +1,11 @@
 name: shipmate apply-detect
-description: Compute the single-env apply work set (from a preview run's plan artifacts) and wave-order it. Skips already-applied cells.
+description: Compute the single-env apply work set (from a plan run's plan artifacts) and wave-order it. Skips already-applied cells.
 inputs:
   environment:
     description: Target environment, e.g. dev-eu.
     required: true
   plan-run-id:
-    description: Preview run id holding the reviewed plan artifacts.
+    description: Plan run id holding the reviewed plan artifacts.
     required: true
   head-sha:
     description: PR head SHA carrying the pending apply checks.

@@ -36,7 +36,7 @@ outputs:
     description: Parsed target environment; empty for a bare `shipmate apply` (all non-explicit environments).
     value: ${{ steps.authz.outputs.environment }}
   plan-run-id:
-    description: Preview run id holding the reviewed plan.
+    description: Plan run id holding the reviewed plan.
     value: ${{ steps.authz.outputs.plan_run_id }}
   head-sha:
     description: PR head SHA.
@@ -124,9 +124,9 @@ runs:
         else
           echo "is_member=false" >> "$GITHUB_OUTPUT"
         fi
-        # Successful preview run for the CURRENT head (the reviewed-plan lookup).
+        # Successful plan run for the CURRENT head (the reviewed-plan lookup).
         head=$(python3 -c "import json;print(json.load(open('pr.json'))['head']['sha'])")
-        gh api "repos/$GITHUB_REPOSITORY/actions/workflows/preview.yml/runs?head_sha=$head&status=success" \
+        gh api "repos/$GITHUB_REPOSITORY/actions/workflows/plan.yml/runs?head_sha=$head&status=success" \
           --jq '{id: (.workflow_runs[0].id // ""), head_sha: (.workflow_runs[0].head_sha // "")}' > plan_run.json
         # Empty id -> no plan run; normalize to {} so authorize treats it as stale.
         python3 -c "import json;d=json.load(open('plan_run.json'));open('plan_run.json','w').write(json.dumps(d if d.get('id') else {}))"

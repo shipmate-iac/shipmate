@@ -72,7 +72,7 @@ def test_latest_review_per_user_wins():
 def test_no_reviewed_plan_rejected_as_stale():
     ok, reason = _decide(plan_run={})
     assert not ok and "re-plan" in reason
-    assert "no reviewed plan" in reason or "no successful preview" in reason
+    assert "no reviewed plan" in reason or "no successful plan" in reason
 
 
 def test_stale_head_sha_rejected():

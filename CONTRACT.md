@@ -32,7 +32,7 @@ Branch protection rules should require `shipmate / gate`, not the
 individual per-unit checks, so that the set of required checks does not
 need to be edited every time a stack or environment is added or removed.
 
-`shipmate / gate` is created (and refreshed on every preview) by the
+`shipmate / gate` is created (and refreshed on every plan run) by the
 `summary` action, and is completed to success by whichever of these happens
 first:
 
@@ -45,7 +45,7 @@ first:
 
 When apply-cell completes an `apply / <env> / <stack>` check, it completes only
 the check-run ids that already existed for that name **before its apply began**.
-A preview re-run can create a fresh duplicate apply check; a duplicate created
+A plan re-run can create a fresh duplicate apply check; a duplicate created
 *mid-apply* is therefore left pending (its plan was not applied by this run),
 while duplicates that predate the apply are all completed so the gate never
 sticks. This keeps `shipmate / gate` from greening on a plan the apply
@@ -139,9 +139,9 @@ its own actionable rejection reason:
 - **approved**: the pull request has an approving review outstanding (the
   latest review per reviewer wins; any `CHANGES_REQUESTED` blocks);
 - **undiverged**: a reviewed plan exists for the pull request's **current**
-  head SHA (the most recent successful preview run whose head matches; a plan
-  for an older head means new commits landed since — stale, re-plan
-  required).
+  head SHA (the most recent successful plan run — the automatic plan run on
+  pull-request open, autoplan — whose head matches; a plan for an older head
+  means new commits landed since — stale, re-plan required).
 
 A bare `shipmate apply` is authorized exactly once, by the same four apply
 requirements — one authorization decision covers the whole multi-environment
@@ -237,21 +237,21 @@ in apply-detect (rename so the path→`-` slug is unique).
 
 This naming contract is breaking for any in-flight plan artifacts: land the
 change when no applies are mid-flight. It also spans two consumer workflow
-files pinned independently — `preview.yml` pins `plan-cell` (the uploader) and
+files pinned independently — `plan.yml` pins `plan-cell` (the uploader) and
 `apply.yml` pins the engine's reusable apply workflows, which pin
 `apply-cell`/`apply-detect` (the downloader/matcher) internally. Bump both
 pins **together** when adopting a build that changes this name: a partial
 bump (uploader on the new name, downloader on the old, or vice versa) makes
 every apply fail its reviewed-plan download fail-safe until the pins agree.
 
-## Preview comment
+## Plan comment
 
 The `summary` action maintains exactly one sticky comment per pull request,
 identified by the HTML marker written verbatim as the comment's first line:
 
 - `<!-- shipmate:summary -->`
 
-The comment is edited in place on every preview run (comment lookup is
+The comment is edited in place on every plan run (comment lookup is
 marker + `github-actions[bot]` author), so GitHub's comment revision history
 doubles as the audit trail of previous plans for the PR.
 
@@ -289,7 +289,7 @@ with the glob pattern `cell-summary.*`. It contains verbatim:
 - `plan.txt` — the `tofu show -no-color` rendering of the reviewed plan.
 
 `plan-cell` (writer) and `summary` (reader) are pinned by the same SHA in a
-consumer's `preview.yml`, so the schema upgrades atomically; the summary
+consumer's `plan.yml`, so the schema upgrades atomically; the summary
 fails loud on a `cell.json` missing schema keys rather than rendering around
 pin skew.
 
@@ -313,7 +313,7 @@ variable **names** only — never values.
 
 The reviewed machine plan file (`stack.otplan`) can be encrypted at rest in the
 uploaded artifact. When the consumer sets the optional `plan-passphrase` input
-on `plan-cell` (in `preview.yml`), the engine encrypts the plan before upload
+on `plan-cell` (in `plan.yml`), the engine encrypts the plan before upload
 using a single symmetric cipher: `openssl enc -aes-256-ctr -pbkdf2 -salt`,
 passphrase supplied via `-pass env:` (never on the command line). `apply-cell`
 decrypts it after download on **every** apply path: all three paths pass it
@@ -342,7 +342,7 @@ workflows.
   rendered output; encryption alone does not hide them from anyone who can read
   the PR or download the `cell-summary` artifact.
 - **Both sides must agree.** `plan-cell` (encrypt) and `apply-cell` (decrypt) are
-  pinned independently (`preview.yml` vs `apply.yml`); the passphrase and the
+  pinned independently (`plan.yml` vs `apply.yml`); the passphrase and the
   engine SHA must match on both. A mismatch surfaces as the fail-safe above, not
   a silent wrong apply.
 
@@ -360,7 +360,7 @@ incompatible with that model; the engine disables it and keeps the rest:
 | `git-out-of-sync` | **disabled** | shipmate applies a chosen reviewed SHA that is legitimately behind `main`; remote-freshness is the wrong assertion for the exact-plan model. |
 | `git-untracked` | kept | A genuinely unexpected untracked file must still block. shipmate's own artifacts are gitignored (below). |
 | `git-uncommitted` | kept | A real dirty tree must block; gitignored artifacts are not tracked-file changes. |
-| `outdated-code` | kept | Catches hand-edited / stale generated `.tf`, complementing the preview codegen check. |
+| `outdated-code` | kept | Catches hand-edited / stale generated `.tf`, complementing the plan codegen check. |
 
 **Mechanism (engine-controlled).** The three `terramate script run` sites —
 `plan-cell`, `apply-cell`, `drift-cell` — pass `--disable-safeguards=git-out-of-sync`

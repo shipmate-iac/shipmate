@@ -2,7 +2,7 @@
 """apply.yml detect: a dispatched single-env apply's work set + waves.
 
 Unlike deploy-detect (merge-driven, all envs), the work set here is scoped to
-ONE environment and sourced from a specific preview run's plan artifacts:
+ONE environment and sourced from a specific plan run's plan artifacts:
 `plan.<env>.<slug>` artifacts present in SHIPMATE_PLAN_RUN_ID name exactly the
 stacks that were planned for this env. We map each present slug back to a stack
 PATH via the run-graph (path->slug is one-way; we slug each graph node forward
@@ -94,9 +94,9 @@ def verify_plan_run(repo, run_id, head_sha):
             "expected 'success'"
         )
     path = run.get("path") or ""
-    if not path.endswith("/preview.yml"):
+    if not path.endswith("/plan.yml"):
         raise SystemExit(
-            f"::error::plan run {run_id} is not a preview.yml run: workflow path is {path!r}"
+            f"::error::plan run {run_id} is not a plan.yml run: workflow path is {path!r}"
         )
 
 

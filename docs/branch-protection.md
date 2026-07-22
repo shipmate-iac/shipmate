@@ -17,7 +17,7 @@ resolves to:
 
 | State | gate | Merge |
 |-------|-----------|-------|
-| A plan cell (or `detect`) failed | `failure` — "preview incomplete" | blocked |
+| A plan cell (or `detect`) failed | `failure` — "plan incomplete" | blocked |
 | Plans succeeded, applies still pending | `queued` (pending) | blocked |
 | Nothing left to apply | `success` | allowed |
 
@@ -68,7 +68,7 @@ Properties that fall out of the existing gate semantics:
   weakens the apply-before-merge guarantee; it only removes the final click.
 - **Stale bases don't sneak through.** With "require branches up to date"
   (strict), a base moved since the plans ran blocks the auto-merge until the
-  branch is updated — and updating re-runs the preview on the new head, which
+  branch is updated — and updating re-runs the plan on the new head, which
   resets gate to pending until the fresh plans are applied. The
   exact-plan invariant is preserved.
 - **The post-merge deploy still runs.** GitHub performs the auto-merge as the
@@ -87,7 +87,7 @@ On a free-tier private repo the required-check gate cannot be created at all.
 
 This is purely a GitHub configuration constraint, not a shipmate one:
 `actions/summary` still emits the correct `shipmate / gate` state in every
-case — `pending` while apply checks are outstanding, `failure` ("preview
+case — `pending` while apply checks are outstanding, `failure` ("plan
 incomplete") when a plan cell fails, and `success` when nothing is left to
 apply. shipmate's responsibility — producing a correct, stable, single
 required status — holds regardless of plan; the ruleset above just enforces it
