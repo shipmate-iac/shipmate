@@ -1,0 +1,3 @@
+# Normalize line endings: LF in the repo for all text files (bash, Python, YAML,
+# Markdown). Prevents CRLF drift from Windows checkouts.
+* text=auto eol=lf

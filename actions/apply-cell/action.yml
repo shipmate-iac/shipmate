@@ -99,7 +99,7 @@ runs:
         ENV: ${{ inputs.env }}
         STACK: ${{ inputs.stack }}
         HEAD_SHA: ${{ inputs.head-sha }}
-      # M6: record the apply-check ids that exist for this (env, stack) BEFORE
+      # Record the apply-check ids that exist for this (env, stack) BEFORE
       # the apply runs. The completion step marks only these done, so a plan
       # re-run that creates a fresh duplicate apply check mid-apply is left
       # pending (its plan was never applied by this run) instead of being greened.
@@ -174,7 +174,7 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
-      # Complete ONLY the ids snapshotted before the apply (see M6 note above):
+      # Complete ONLY the ids snapshotted before the apply (see the snapshot note above):
       # a duplicate apply check created mid-apply is not in the snapshot and stays
       # pending. The body is static (no author input) so it is a plain heredoc.
       run: |
