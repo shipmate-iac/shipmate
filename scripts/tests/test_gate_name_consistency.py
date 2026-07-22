@@ -10,6 +10,18 @@ test_check_runs_filter_aligned guards the check-runs read discipline.
 import pathlib
 
 ENGINE = pathlib.Path(__file__).resolve().parents[2]
+# Generated / third-party / VCS dirs: never shipmate source, and their contents
+# (compiled .pyc constant pools, vendored packages) can carry the retired token
+# for reasons unrelated to this repo -- scanning them would false-fail the guard.
+SKIP_DIRS = {
+    ".git",
+    ".superpowers",
+    ".venv",
+    "__pycache__",
+    ".pytest_cache",
+    ".ruff_cache",
+    "node_modules",
+}
 GATE = "shipmate / gate"
 WRITERS = [
     "actions/summary/action.yml",
@@ -34,7 +46,7 @@ def test_no_retired_gate_token_survivors():
     for p in ENGINE.rglob("*"):
         if not p.is_file():
             continue
-        if any(part in (".git", ".superpowers") for part in p.parts):
+        if any(part in SKIP_DIRS for part in p.parts):
             continue
         try:
             text = p.read_text(encoding="utf-8")
