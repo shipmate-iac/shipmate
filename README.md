@@ -81,18 +81,18 @@ The `preview.yml` workflow (thin and identical across repo layouts; see the
   artifact, and creates the `apply / <env> / <stack>` check **pending** (or
   completed "no changes").
 - **`summary`** — `actions/summary` upserts one sticky PR comment (a stack ×
-  env table) and creates/refreshes the aggregate **`shipmate / checkmate`**
-  gate check, which stays non-green while any apply is pending or any plan
+  env table) and creates/refreshes the aggregate **`shipmate / gate`**
+  check, which stays non-green while any apply is pending or any plan
   cell failed.
 
 Note on plan output: plan text lives in each `plan / <env> / <stack>` job's
 **Summary**, not in a separate Checks-API check-run — the matrix job already
 emits the check of that name, so a second API check would duplicate it. The
-`apply` and `checkmate` checks *are* API check-runs (created pending; they
+`apply` and `gate` checks *are* API check-runs (created pending; they
 have no backing job in `preview.yml`).
 
 To make the gate enforce apply-before-merge, configure branch protection to
-require `shipmate / checkmate`; see [`docs/branch-protection.md`](docs/branch-protection.md).
+require `shipmate / gate`; see [`docs/branch-protection.md`](docs/branch-protection.md).
 
 ## Deploy + drift
 

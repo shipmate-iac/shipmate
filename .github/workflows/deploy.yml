@@ -102,7 +102,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions: { checks: write }
     steps:
-      - name: Complete checkmate on the merged PR head SHA
+      - name: Complete gate on the merged PR head SHA
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ needs.detect.outputs.head_sha }}
@@ -121,7 +121,7 @@ jobs:
           python3 - "$HEAD_SHA" "$concl" "$title" > body.json <<'PY'
           import json, sys
           head, concl, title = sys.argv[1:4]
-          print(json.dumps({"name": "shipmate / checkmate", "head_sha": head,
+          print(json.dumps({"name": "shipmate / gate", "head_sha": head,
               "status": "completed", "conclusion": concl,
               "output": {"title": title, "summary": "Deploy env-level applies completed."}}))
           PY

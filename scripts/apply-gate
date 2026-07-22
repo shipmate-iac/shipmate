@@ -7,7 +7,7 @@ verdict to GITHUB_OUTPUT:
 
 - `complete`   — every apply check's latest run is completed with a good
                  conclusion (success, or neutral for no-change cells); the
-                 caller may complete the `shipmate / checkmate` gate.
+                 caller may complete the `shipmate / gate` check.
 - `pending`    — at least one apply check is still open, failed, or was
                  cancelled; the caller must leave the gate untouched.
 - `no-applies` — the commit has no apply checks at all (nothing to gate on);

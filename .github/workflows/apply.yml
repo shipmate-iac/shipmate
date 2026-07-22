@@ -66,9 +66,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions: { checks: write }
     steps:
-      - name: Complete checkmate if every apply check is done
+      - name: Complete gate if every apply check is done
         id: gate
-        uses: ship-iac/shipmate/actions/checkmate-refresh@30ea42bfbeaca73c76891dfed881ca5db2b1f410
+        uses: ship-iac/shipmate/actions/gate-refresh@30ea42bfbeaca73c76891dfed881ca5db2b1f410
         with:
           head-sha: ${{ inputs.ref }}
           github-token: ${{ github.token }}
@@ -103,9 +103,9 @@ jobs:
           python3 - "$emoji" "$word" "$ENVIRONMENT" "$GATE" > body.json <<'PY'
           import json, sys
           emoji, word, env, gate = sys.argv[1:5]
-          tail = ("`shipmate / checkmate` is complete — every environment is applied."
+          tail = ("`shipmate / gate` is complete — every environment is applied."
                   if gate == "complete" else
-                  "`shipmate / checkmate` stays pending until every "
+                  "`shipmate / gate` stays pending until every "
                   "environment is applied (or the merge deploy runs).")
           print(json.dumps({"body": f"{emoji} shipmate: `shipmate apply {env}` {word}. " + tail}))
           PY

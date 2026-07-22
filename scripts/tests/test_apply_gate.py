@@ -106,7 +106,7 @@ def test_stale_completed_run_does_not_mask_newer_pending():
 def test_non_apply_checks_ignored():
     runs = [
         _run("plan / dev-eu / stacks/app", "completed", "success"),
-        _run("shipmate / checkmate", "queued", None),
+        _run("shipmate / gate", "queued", None),
         _run("apply / dev-eu / stacks/app", "completed", "success"),
     ]
     assert ag.verdict(runs) == "complete"

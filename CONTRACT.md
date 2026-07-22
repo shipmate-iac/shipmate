@@ -26,17 +26,17 @@ reconstruct the identical name from the one value they share.
 In addition to the per-unit checks, one aggregate check rolls up the full
 fan-out into a single required status, named verbatim:
 
-- `shipmate / checkmate`
+- `shipmate / gate`
 
-Branch protection rules should require `shipmate / checkmate`, not the
+Branch protection rules should require `shipmate / gate`, not the
 individual per-unit checks, so that the set of required checks does not
 need to be edited every time a stack or environment is added or removed.
 
-`shipmate / checkmate` is created (and refreshed on every preview) by the
+`shipmate / gate` is created (and refreshed on every preview) by the
 `summary` action, and is completed to success by whichever of these happens
 first:
 
-- the pre-merge apply path (`checkmate-refresh`, called from the apply
+- the pre-merge apply path (`gate-refresh`, called from the apply
   workflow's summary job) once **every** `apply / <env> / <stack>` check on
   the PR head is complete — a targeted `shipmate apply <env>` of only some
   environments leaves the gate pending;
@@ -48,7 +48,7 @@ the check-run ids that already existed for that name **before its apply began**.
 A preview re-run can create a fresh duplicate apply check; a duplicate created
 *mid-apply* is therefore left pending (its plan was not applied by this run),
 while duplicates that predate the apply are all completed so the gate never
-sticks. This keeps `shipmate / checkmate` from greening on a plan the apply
+sticks. This keeps `shipmate / gate` from greening on a plan the apply
 never used.
 
 ## Env model
@@ -123,7 +123,7 @@ reviewed plan for the current PR head, in `env_order` env-levels (see Env
 apply order, below), **except** environments listed in the Terramate global
 `global.shipmate.explicit_envs`. Explicit environments (typically production)
 must always be named: their `apply / <env> / <stack>` checks simply stay
-pending under a bare apply — so `shipmate / checkmate` keeps gating the
+pending under a bare apply — so `shipmate / gate` keeps gating the
 merge — until someone runs `shipmate apply <env>` for them. An absent global
 (or `[]`) means a bare apply targets everything. Malformed `explicit_envs`
 shapes (not a list of strings) fail loud, like `env_order`.
@@ -424,11 +424,11 @@ stack-wave by stack-wave exactly as described above (see Fan-out).
 
 The engine ships the merge-deploy path as the reusable workflow
 `.github/workflows/deploy.yml` (deploy-detect → env-levels 0..3 via
-`apply-env-level.yml` → checkmate completion + optional Slack notify), the
+`apply-env-level.yml` → gate completion + optional Slack notify), the
 bare-apply path as `.github/workflows/apply-all.yml` (detect → env-levels
-0..3 via `apply-env-level.yml` → checkmate refresh + result comment), and the
+0..3 via `apply-env-level.yml` → gate refresh + result comment), and the
 targeted path as `.github/workflows/apply.yml` (single-env detect → one
-`apply-env-level.yml` call → checkmate refresh + result comment). A
+`apply-env-level.yml` call → gate refresh + result comment). A
 consuming repo carries two thin wrappers: `deploy.yml` (`on: push` to the
 default branch; passes only its flavor's `state_suffix`) and `apply.yml`
 (`workflow_dispatch`; its optional `environment` input routes to the targeted

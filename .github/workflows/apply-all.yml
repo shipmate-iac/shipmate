@@ -105,9 +105,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions: { checks: write }
     steps:
-      - name: Complete checkmate if every apply check is done
+      - name: Complete gate if every apply check is done
         id: gate
-        uses: ship-iac/shipmate/actions/checkmate-refresh@e4615d0df6cc11b8a3d248005d225d3c05a8a156
+        uses: ship-iac/shipmate/actions/gate-refresh@e4615d0df6cc11b8a3d248005d225d3c05a8a156
         with:
           head-sha: ${{ inputs.ref }}
           github-token: ${{ github.token }}
@@ -155,9 +155,9 @@ jobs:
               envs = ", ".join(f"`{e}`" for e in skipped)
               parts.append(f"Skipped (ordered after an unapplied explicit environment): {envs}.")
           parts.append(
-              "`shipmate / checkmate` is complete — every environment is applied."
+              "`shipmate / gate` is complete — every environment is applied."
               if gate == "complete" else
-              "`shipmate / checkmate` stays pending until every environment is applied "
+              "`shipmate / gate` stays pending until every environment is applied "
               "(or the merge deploy runs)."
           )
           print(json.dumps({"body": " ".join(parts)}))
