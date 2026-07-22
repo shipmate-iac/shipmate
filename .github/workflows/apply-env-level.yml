@@ -30,7 +30,7 @@ jobs:
       TF_VAR_region: ${{ vars.TF_VAR_region }}
       TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0, ref: "${{ inputs.head_sha }}" }
       - uses: ship-iac/shipmate/actions/setup@e36c57f5bebb2f4fcef5dc8ede889c9ec442a8dc
         with:
@@ -67,7 +67,7 @@ jobs:
       TF_VAR_region: ${{ vars.TF_VAR_region }}
       TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0, ref: "${{ inputs.head_sha }}" }
       - uses: ship-iac/shipmate/actions/setup@e36c57f5bebb2f4fcef5dc8ede889c9ec442a8dc
         with:
@@ -104,7 +104,7 @@ jobs:
       TF_VAR_region: ${{ vars.TF_VAR_region }}
       TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0, ref: "${{ inputs.head_sha }}" }
       - uses: ship-iac/shipmate/actions/setup@e36c57f5bebb2f4fcef5dc8ede889c9ec442a8dc
         with:
@@ -141,7 +141,7 @@ jobs:
       TF_VAR_region: ${{ vars.TF_VAR_region }}
       TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0, ref: "${{ inputs.head_sha }}" }
       - uses: ship-iac/shipmate/actions/setup@e36c57f5bebb2f4fcef5dc8ede889c9ec442a8dc
         with:
@@ -178,7 +178,7 @@ jobs:
       TF_VAR_region: ${{ vars.TF_VAR_region }}
       TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0, ref: "${{ inputs.head_sha }}" }
       - uses: ship-iac/shipmate/actions/setup@e36c57f5bebb2f4fcef5dc8ede889c9ec442a8dc
         with:
@@ -215,7 +215,7 @@ jobs:
       TF_VAR_region: ${{ vars.TF_VAR_region }}
       TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0, ref: "${{ inputs.head_sha }}" }
       - uses: ship-iac/shipmate/actions/setup@e36c57f5bebb2f4fcef5dc8ede889c9ec442a8dc
         with:
@@ -252,7 +252,7 @@ jobs:
       TF_VAR_region: ${{ vars.TF_VAR_region }}
       TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0, ref: "${{ inputs.head_sha }}" }
       - uses: ship-iac/shipmate/actions/setup@e36c57f5bebb2f4fcef5dc8ede889c9ec442a8dc
         with:
@@ -289,7 +289,7 @@ jobs:
       TF_VAR_region: ${{ vars.TF_VAR_region }}
       TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0, ref: "${{ inputs.head_sha }}" }
       - uses: ship-iac/shipmate/actions/setup@e36c57f5bebb2f4fcef5dc8ede889c9ec442a8dc
         with:
