@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import pathlib
 from importlib.machinery import SourceFileLoader
 
@@ -165,10 +166,11 @@ def test_merged_head_gives_up_after_attempts_exhausted_all_empty(monkeypatch):
 def test_foreign_app_completed_check_stays_pending():
     # A completed+success check created by a foreign identity (github-actions,
     # app id 15368) must not count as done once SHIPMATE_APP_ID scopes the
-    # detect to the shipmate App (999) -- main() wraps parse_jsonl in
-    # ag.from_app before ag.done_names; reproduce that composition here.
+    # detect to the shipmate App (999) -- main() calls ag.app_done_names on the
+    # raw JSONL lines; reproduce that exact call here so this test would go
+    # red if main() ever stopped routing through app_done_names.
     cells = [{"stack": "stacks/app", "environment": "dev-eu", "workload": ""}]
-    checks = [
+    line = json.dumps(
         {
             "name": "apply / dev-eu / stacks/app",
             "status": "completed",
@@ -176,9 +178,9 @@ def test_foreign_app_completed_check_stays_pending():
             "started_at": "2026-07-18T10:00:00Z",
             "id": 1,
             "app": {"id": 15368},
-        },
-    ]
-    done = dd.ag.done_names(dd.ag.from_app(checks, "999"))
+        }
+    )
+    done = dd.ag.app_done_names([line], "999")
     assert dd.filter_pending(cells, done) == cells
 
 

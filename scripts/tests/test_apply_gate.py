@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import pathlib
 from importlib.machinery import SourceFileLoader
 
@@ -300,3 +301,15 @@ def test_forged_newer_completed_duplicate_cannot_green_a_pending_name():
     forged = _run_obj("apply / dev-eu / stacks/app", id=11, app_id=15368)
     runs = ag.from_app([pending, forged], "999")
     assert ag.verdict(runs) == "pending"
+
+
+def test_app_done_names_excludes_foreign_app_completed():
+    # The real guard for detect scripts' main(): if app_done_names ever stops
+    # calling from_app internally, this must go red. A foreign-App (15368,
+    # github-actions) completed check must never appear in the result, even
+    # though an App-authored (999) completed check for a different name does.
+    ours = json.dumps(_run_obj("apply / dev-eu / stacks/app", id=1, app_id=999))
+    foreign = json.dumps(_run_obj("apply / dev-us / stacks/app", id=2, app_id=15368))
+    names = ag.app_done_names([ours, foreign], "999")
+    assert names == {"apply / dev-eu / stacks/app"}
+    assert "apply / dev-us / stacks/app" not in names

@@ -84,12 +84,8 @@ def main():
         ]
     )
     # Only App-authored apply checks count: a forged same-name check from any
-    # other identity must not mark work done (see apply-gate.from_app).
-    checks = ag.from_app(ag.parse_jsonl(checks_jsonl.splitlines()), os.environ["SHIPMATE_APP_ID"])
-    # Shared with apply-gate: a name is done only if its *latest* run is
-    # completed with a good conclusion — not merely "some run of this name
-    # ever completed" (which would wedge on a failed/superseded run).
-    completed = ag.done_names(checks)
+    # other identity must not mark work done (see apply-gate.app_done_names).
+    completed = ag.app_done_names(checks_jsonl.splitlines(), os.environ["SHIPMATE_APP_ID"])
     pending = filter_pending(cells, completed)
     graph = bm._run(["terramate", "experimental", "run-graph", "--label", "stack.dir"])
     deps = wv.parse_dot(graph)

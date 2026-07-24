@@ -97,6 +97,14 @@ def from_app(check_runs, app_id):
     return [r for r in check_runs if ((r.get("app") or {}).get("id")) == want]
 
 
+def app_done_names(check_run_lines, app_id):
+    """done_names restricted to a single App's apply checks: parse JSONL,
+    from_app-filter to app_id, then done_names. The one entry point the
+    detects call, so "only App-authored checks count as done" lives in one
+    place — dropping the from_app filter here is a visible, tested change."""
+    return done_names(from_app(parse_jsonl(check_run_lines), app_id))
+
+
 def verdict(check_runs):
     latest = latest_by_name(check_runs)
     if not latest:
