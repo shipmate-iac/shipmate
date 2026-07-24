@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import pathlib
 from importlib.machinery import SourceFileLoader
 
@@ -269,3 +270,55 @@ def test_latest_by_name_default_prefix_unchanged():
         },
     ]
     assert set(ag.latest_by_name(runs)) == {"apply / dev-eu / stacks/app"}
+
+
+def _run_obj(name, status="completed", conclusion="success", id=1, app_id=999):
+    return {
+        "name": name,
+        "status": status,
+        "conclusion": conclusion,
+        "id": id,
+        "app": {"id": app_id},
+    }
+
+
+def test_from_app_filters_foreign_and_missing_app():
+    ours = _run_obj("apply / dev-eu / stacks/app", app_id=999)
+    foreign = _run_obj("apply / dev-eu / stacks/app", id=2, app_id=15368)
+    no_app = {
+        "name": "apply / dev-eu / stacks/app",
+        "status": "completed",
+        "conclusion": "success",
+        "id": 3,
+    }
+    assert ag.from_app([ours, foreign, no_app], "999") == [ours]
+
+
+def test_forged_newer_completed_duplicate_cannot_green_a_pending_name():
+    pending = _run_obj(
+        "apply / dev-eu / stacks/app", status="queued", conclusion=None, id=10, app_id=999
+    )
+    forged = _run_obj("apply / dev-eu / stacks/app", id=11, app_id=15368)
+    runs = ag.from_app([pending, forged], "999")
+    assert ag.verdict(runs) == "pending"
+
+
+def test_from_app_empty_app_id_fails_loud():
+    # An unset SHIPMATE_APP_ID renders as '' -- int('') must not raw-traceback
+    # (ValueError) and take down the whole detect/gate/apply run; fail loud
+    # with a message naming the variable instead.
+    runs = [_run_obj("apply / dev-eu / stacks/app")]
+    with pytest.raises(SystemExit, match="SHIPMATE_APP_ID"):
+        ag.from_app(runs, "")
+
+
+def test_app_done_names_excludes_foreign_app_completed():
+    # The real guard for detect scripts' main(): if app_done_names ever stops
+    # calling from_app internally, this must go red. A foreign-App (15368,
+    # github-actions) completed check must never appear in the result, even
+    # though an App-authored (999) completed check for a different name does.
+    ours = json.dumps(_run_obj("apply / dev-eu / stacks/app", id=1, app_id=999))
+    foreign = json.dumps(_run_obj("apply / dev-us / stacks/app", id=2, app_id=15368))
+    names = ag.app_done_names([ours, foreign], "999")
+    assert names == {"apply / dev-eu / stacks/app"}
+    assert "apply / dev-us / stacks/app" not in names

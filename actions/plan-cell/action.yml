@@ -1,5 +1,5 @@
 name: shipmate plan-cell
-description: Plan one stack x env, publish plan text + artifacts, create the pending apply check.
+description: Plan one stack x env, publish plan text + artifacts. (The pending apply check is created by actions/summary with the App token.)
 inputs:
   stack:
     description: Stack path, e.g. stacks/app.
@@ -9,12 +9,6 @@ inputs:
     required: true
   env:
     description: Environment name, e.g. dev-eu.
-    required: true
-  head-sha:
-    description: PR head commit SHA for the apply check.
-    required: true
-  github-token:
-    description: GITHUB_TOKEN with checks:write.
     required: true
   retention-days:
     description: Plan artifact retention (days); caps how long the plan artifact stays downloadable. Empty = the repository default.
@@ -110,6 +104,8 @@ runs:
       run: |
         python3 - <<'PY'
         import json, os
+        with open("fingerprint.txt", encoding="utf-8") as fh:
+            fingerprint = fh.read().strip()
         with open("cell.json", "w") as fh:
             json.dump({
                 "stack": os.environ["STACK_NAME"],
@@ -119,6 +115,7 @@ runs:
                 "change": int(os.environ["CHANGE"]),
                 "destroy": int(os.environ["DESTROY"]),
                 "changed": os.environ["CHANGED"] == "true",
+                "fingerprint": fingerprint,
             }, fh)
         PY
 
@@ -130,38 +127,3 @@ runs:
           cell.json
           plan.txt
         retention-days: ${{ inputs.retention-days }}
-
-    - name: Create apply check (pending / no-changes)
-      shell: bash
-      env:
-        GH_TOKEN: ${{ inputs.github-token }}
-        ENV: ${{ inputs.env }}
-        STACK: ${{ inputs.stack }}
-        HEAD_SHA: ${{ inputs.head-sha }}
-        CHANGED: ${{ steps.plan.outputs.changed }}
-      run: |
-        set -euo pipefail
-        # gh api does NOT support -f bracket-nesting (output[title]=...); it would
-        # POST a flat literal key. Build the JSON body with python and pipe it in.
-        # Author-controlled values pass via env, never interpolated into the script.
-        # Check name uses the stack PATH ($STACK) so deploy-detect (which only
-        # has the path) can reconstruct it exactly, independent of stack-name.
-        name="apply / $ENV / $STACK"
-        fp="$(cat fingerprint.txt)"
-        if [ "$CHANGED" = "true" ]; then
-          status="queued"; conclusion=""; title="apply pending"
-          summary="Waiting to be applied. Merge after apply completes for this stack x environment."
-        else
-          status="completed"; conclusion="neutral"; title="no changes"
-          summary="Plan produced no changes for this stack x environment."
-        fi
-        python3 - "$name" "$HEAD_SHA" "$status" "$conclusion" "$fp" "$title" "$summary" > body.json <<'PY'
-        import json, sys
-        name, head, status, conclusion, fp, title, summary = sys.argv[1:8]
-        body = {"name": name, "head_sha": head, "status": status,
-                "external_id": fp, "output": {"title": title, "summary": summary}}
-        if conclusion:
-            body["conclusion"] = conclusion
-        print(json.dumps(body))
-        PY
-        gh api "repos/$GITHUB_REPOSITORY/check-runs" --input body.json >/dev/null

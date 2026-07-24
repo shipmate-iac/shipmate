@@ -20,12 +20,18 @@ inputs:
     description: Flavor state path, e.g. stacks/app/.state.
     required: true
   github-token:
-    description: GITHUB_TOKEN with checks:write and actions:read.
+    description: GITHUB_TOKEN with actions:read (reviewed-plan artifact download).
     required: true
   plan-passphrase:
     description: Passphrase to decrypt the .otplan artifact; must match plan-cell's. Empty = expect plaintext.
     required: false
     default: ""
+  app-id:
+    description: shipmate App id (a repo/org variable, not a secret).
+    required: true
+  private-key:
+    description: shipmate App private key (from a repo/org secret).
+    required: true
 runs:
   using: composite
   steps:
@@ -39,6 +45,16 @@ runs:
         slug=$(printf '%s' "$STACK" | tr / -)
         [[ "$slug" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::stack path produced invalid slug"; exit 1; }
         echo "slug=$slug" >> "$GITHUB_OUTPUT"
+
+    - name: Mint App installation token
+      id: token
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ github.event.repository.name }}
+        permission-checks: write
 
     - name: Download reviewed plan artifact (fail-safe if missing)
       shell: bash
@@ -95,16 +111,19 @@ runs:
     - name: Snapshot pre-existing apply-check ids
       shell: bash
       env:
-        GH_TOKEN: ${{ inputs.github-token }}
+        GH_TOKEN: ${{ steps.token.outputs.token }}
         ENV: ${{ inputs.env }}
         STACK: ${{ inputs.stack }}
         HEAD_SHA: ${{ inputs.head-sha }}
+        SHIPMATE_APP_ID: ${{ inputs.app-id }}
       # Record the apply-check ids that exist for this (env, stack) BEFORE
       # the apply runs. The completion step marks only these done, so a plan
       # re-run that creates a fresh duplicate apply check mid-apply is left
       # pending (its plan was never applied by this run) instead of being greened.
       # filter=all sees every pre-existing duplicate; writing to RUNNER_TEMP keeps
       # the live git-untracked safeguard from failing the apply on a repo-root file.
+      # Only App-authored checks are snapshotted/completed — a forged same-name
+      # check created by another identity is never greened.
       run: |
         set -euo pipefail
         [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::head-sha must be a 40-char lowercase hex SHA (got: $HEAD_SHA)"; exit 1; }
@@ -117,8 +136,13 @@ runs:
         python3 - > "$RUNNER_TEMP/preexisting-apply-ids.txt" <<'PY'
         import json, os
         name = f"apply / {os.environ['ENV']} / {os.environ['STACK']}"
+        _app_id = os.environ["SHIPMATE_APP_ID"]
+        if not _app_id:
+            raise SystemExit("::error::SHIPMATE_APP_ID is empty — set the SHIPMATE_APP_ID repo/org variable to the shipmate App id.")
+        app_id = int(_app_id)
         with open(os.environ["RUNNER_TEMP"] + "/checks.jsonl") as fh:
-            ids = [c["id"] for c in map(json.loads, fh) if c.get("name") == name]
+            ids = [c["id"] for c in map(json.loads, fh)
+                   if c.get("name") == name and ((c.get("app") or {}).get("id")) == app_id]
         if not ids:
             raise SystemExit(f"::error::no apply check named '{name}' on head SHA before apply; nothing to complete.")
         print("\n".join(str(i) for i in ids))
@@ -170,10 +194,21 @@ runs:
         mode: save
         path: ${{ inputs.state-path }}
 
+    - name: Mint App installation token for completion
+      # Re-mint: a long (>1h) apply can outlive the job-start token; completion needs a fresh one.
+      id: token_complete
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ github.event.repository.name }}
+        permission-checks: write
+
     - name: Complete the apply check
       shell: bash
       env:
-        GH_TOKEN: ${{ inputs.github-token }}
+        GH_TOKEN: ${{ steps.token_complete.outputs.token }}
       # Complete ONLY the ids snapshotted before the apply (see the snapshot note above):
       # a duplicate apply check created mid-apply is not in the snapshot and stays
       # pending. The body is static (no author input) so it is a plain heredoc.

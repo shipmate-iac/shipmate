@@ -10,6 +10,9 @@ inputs:
   github-token:
     description: 'GITHUB_TOKEN with actions:read, checks:read, contents:read.'
     required: true
+  app-id:
+    description: shipmate App id (repo/org variable); only checks authored by this App count as done.
+    required: true
 outputs:
   envlevel0_waves: { description: JSON wave0..wave7 map for env-level 0, value: "${{ steps.d.outputs.envlevel0_waves }}" }
   envlevel1_waves: { description: JSON wave0..wave7 map for env-level 1, value: "${{ steps.d.outputs.envlevel1_waves }}" }
@@ -33,4 +36,5 @@ runs:
         GH_TOKEN: ${{ inputs.github-token }}
         SHIPMATE_PLAN_RUN_ID: ${{ inputs.plan-run-id }}
         SHIPMATE_HEAD_SHA: ${{ inputs.head-sha }}
+        SHIPMATE_APP_ID: ${{ inputs.app-id }}
       run: python3 "$GITHUB_ACTION_PATH/../../scripts/apply-all-detect"

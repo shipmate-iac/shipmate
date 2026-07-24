@@ -1,5 +1,5 @@
 name: shipmate summary
-description: Upsert the sticky plan comment and create/refresh the shipmate / gate check.
+description: Mint a shipmate App installation token and, as the App, create the pending apply checks, upsert the sticky plan comment, and create/refresh the shipmate / gate check.
 inputs:
   pr-number:
     description: Pull request number.
@@ -17,17 +17,47 @@ inputs:
   detect-result:
     description: 'Result of the detect job (needs.detect.result): success|failure|cancelled|skipped.'
     required: true
-  github-token:
-    description: GITHUB_TOKEN with statuses:write (gate) + checks:read (plan-check links) + pull-requests:write (sticky comment).
+  app-id:
+    description: shipmate App id (a repo/org variable, not a secret).
+    required: true
+  private-key:
+    description: shipmate App private key (from a repo/org secret).
     required: true
 runs:
   using: composite
   steps:
+    - name: Mint App installation token
+      id: token
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ github.event.repository.name }}
+        permission-checks: write
+        permission-statuses: write
+        permission-pull-requests: write
+
+    - name: Create apply checks (pending / no-changes)
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.token.outputs.token }}
+        SHIPMATE_HEAD_SHA: ${{ inputs.head-sha }}
+        SHIPMATE_CELLS_DIR: ${{ inputs.cells-dir }}
+      run: |
+        set -euo pipefail
+        [[ "$SHIPMATE_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::head-sha must be a 40-char lowercase hex SHA (got: $SHIPMATE_HEAD_SHA)"; exit 1; }
+        python3 "$GITHUB_ACTION_PATH/../../scripts/pending-checks" > bodies.jsonl
+        while IFS= read -r body; do
+          [ -z "$body" ] && continue
+          printf '%s' "$body" | gh api "repos/$GITHUB_REPOSITORY/check-runs" --input - >/dev/null
+        done < bodies.jsonl
+
     - name: Build comment + gate state
       id: build
       shell: bash
       env:
-        GH_TOKEN: ${{ inputs.github-token }}
+        GH_TOKEN: ${{ steps.token.outputs.token }}
         CELLS: ${{ inputs.cells-dir }}
         HEAD_SHA: ${{ inputs.head-sha }}
       run: |
@@ -49,18 +79,38 @@ runs:
         fi
         python3 "$GITHUB_ACTION_PATH/../../scripts/summary-comment" < check-runs.jsonl
 
+    - name: Doctor — settings-drift warnings (never blocks)
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.token.outputs.token }}
+        SHIPMATE_APP_ID: ${{ inputs.app-id }}
+        SHIPMATE_CELLS_DIR: ${{ inputs.cells-dir }}
+        SHIPMATE_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      run: |
+        set -euo pipefail
+        if python3 "$GITHUB_ACTION_PATH/../../scripts/doctor" > doctor.md; then
+          if [ -s doctor.md ]; then
+            { echo ""; echo "### doctor"; cat doctor.md; } >> comment.md
+          fi
+        else
+          echo "::warning::doctor probes errored; skipping settings-drift section"
+        fi
+
     - name: Upsert sticky comment
       shell: bash
       env:
-        GH_TOKEN: ${{ inputs.github-token }}
+        GH_TOKEN: ${{ steps.token.outputs.token }}
         PR: ${{ inputs.pr-number }}
       run: |
         set -euo pipefail
         marker='<!-- shipmate:summary -->'
         # --paginate evaluates --jq per page, so a marker match on >1 page emits
         # multiple ids; head -n1 keeps the single id the PATCH URL needs.
+        # Match the marker plus any Bot author, not a hardcoded login: the
+        # App's bot login is derived from the registered App name, which a
+        # consumer org may have had to slug differently than "shipmate[bot]".
         id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
-               --jq "map(select((.body | contains(\"$marker\")) and .user.login == \"github-actions[bot]\")) | .[0].id // empty" | head -n1)
+               --jq "map(select((.body | contains(\"$marker\")) and .user.type == \"Bot\")) | .[0].id // empty" | head -n1)
         if [ -n "$id" ]; then
           gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@comment.md >/dev/null
         else
@@ -70,7 +120,7 @@ runs:
     - name: Create/refresh gate
       shell: bash
       env:
-        GH_TOKEN: ${{ inputs.github-token }}
+        GH_TOKEN: ${{ steps.token.outputs.token }}
         HEAD_SHA: ${{ inputs.head-sha }}
         PLAN_RESULT: ${{ inputs.plan-result }}
         DETECT_RESULT: ${{ inputs.detect-result }}
@@ -84,7 +134,10 @@ runs:
         # re-push, spawns two runs = two suites). The merge evaluator then reads
         # the live suite, finds no gate there, and blocks the PR forever while
         # the green gate sits in the stale suite. A commit status is
-        # commit-scoped, so it is immune to that attribution race.
+        # commit-scoped, so it is immune to that attribution race. Written
+        # with the App's installation token (statuses:write) alongside the
+        # App-authored checks and sticky comment above — one minted token
+        # covers all three writes for this job.
         # gh api has no -f bracket-nesting; build the JSON body with python.
         # Gate soundness: read the upstream job results, not just the cell artifacts.
         pr="$PLAN_RESULT"; dr="$DETECT_RESULT"

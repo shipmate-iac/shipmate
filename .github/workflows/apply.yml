@@ -13,6 +13,7 @@ on:
       # are inherited by a called workflow automatically; secrets are NOT — a
       # wrapper must pass this (or use `secrets: inherit`), else the App-token
       # step in `summary` mints an empty key and the whole run reports red.
+      # Feeds both gate-refresh's App-token mint and the result-comment mint.
       SHIPMATE_APP_PRIVATE_KEY: { required: true }
       SHIPMATE_PLAN_PASSPHRASE: { required: false }
 jobs:
@@ -38,6 +39,7 @@ jobs:
           plan-run-id: ${{ inputs.plan_run_id }}
           head-sha: ${{ inputs.ref }}
           github-token: ${{ github.token }}
+          app-id: ${{ vars.SHIPMATE_APP_ID }}
 
   # A targeted apply is single-env by design, so its pending wave set is exactly
   # one env-level's wave matrix — run it through the same engine the deploy and
@@ -46,7 +48,7 @@ jobs:
     needs: [detect]
     if: ${{ !failure() && !cancelled() && needs.detect.outputs.empty != 'true' }}
     uses: ship-iac/shipmate/.github/workflows/apply-env-level.yml@1ddcad409bd388ed437c78522e74cff839c02b20
-    permissions: { contents: read, checks: write, actions: read }
+    permissions: { contents: read, actions: read }
     with:
       waves_json: ${{ needs.detect.outputs.waves }}
       head_sha: ${{ needs.detect.outputs.head_sha }}
@@ -64,16 +66,18 @@ jobs:
     needs: [detect, apply]
     if: always()
     runs-on: ubuntu-latest
-    # gate-refresh scans the apply check-runs (checks:read) and completes the
-    # gate as a commit status (statuses:write); it no longer writes a check-run.
-    permissions: { checks: read, statuses: write }
+    # gate-refresh mints its own App token (checks:read scan + statuses:write
+    # gate write) and completes the gate as a commit status; no GITHUB_TOKEN
+    # scope is needed here.
+    permissions: {}
     steps:
       - name: Complete gate if every apply check is done
         id: gate
         uses: ship-iac/shipmate/actions/gate-refresh@cc54ebf89eb763a243a0dc2fc2504ba7dbed5b92
         with:
           head-sha: ${{ inputs.ref }}
-          github-token: ${{ github.token }}
+          app-id: ${{ vars.SHIPMATE_APP_ID }}
+          private-key: ${{ secrets.SHIPMATE_APP_PRIVATE_KEY }}
       - name: App token for result comment
         id: token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
@@ -82,6 +86,7 @@ jobs:
           private-key: ${{ secrets.SHIPMATE_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
+          permission-pull-requests: write
       - name: Result comment via the App
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}

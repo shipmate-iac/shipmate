@@ -13,6 +13,10 @@ verdict to GITHUB_OUTPUT:
 - `no-applies` — the commit has no apply checks at all (nothing to gate on);
                  the caller must leave the gate untouched.
 
+Check-runs are filtered to the shipmate GitHub App's identity (`from_app`,
+env `SHIPMATE_APP_ID`) before verdict is computed, so a same-name run created
+by any other identity can never feed the gate.
+
 The GitHub API returns every historical run of a re-created check name, so
 runs are grouped by name and judged by the newest run per name, ordered by
 check-run id (monotonically increasing with creation, and always present --
@@ -80,6 +84,32 @@ def parse_jsonl(lines):
     return out
 
 
+def from_app(check_runs, app_id):
+    """Keep only check-runs created by the given GitHub App id.
+
+    Check-run writes moved to the shipmate App: a same-name check created by
+    any other identity (github-actions app id 15368, another App) must never
+    feed a gate verdict or a detect work queue — a forged newer completed
+    duplicate would otherwise green a pending name via latest_by_name, and a
+    forged pending one would wedge the gate. Runs with no `app` field are
+    dropped too (fail-closed)."""
+    if not app_id:
+        raise SystemExit(
+            "::error::SHIPMATE_APP_ID is empty — set the SHIPMATE_APP_ID repo/org "
+            "variable to the shipmate App id (see docs/github-app.md)."
+        )
+    want = int(app_id)
+    return [r for r in check_runs if ((r.get("app") or {}).get("id")) == want]
+
+
+def app_done_names(check_run_lines, app_id):
+    """done_names restricted to a single App's apply checks: parse JSONL,
+    from_app-filter to app_id, then done_names. The one entry point the
+    detects call, so "only App-authored checks count as done" lives in one
+    place — dropping the from_app filter here is a visible, tested change."""
+    return done_names(from_app(parse_jsonl(check_run_lines), app_id))
+
+
 def verdict(check_runs):
     latest = latest_by_name(check_runs)
     if not latest:
@@ -90,7 +120,7 @@ def verdict(check_runs):
 
 
 def main():
-    runs = parse_jsonl(sys.stdin)
+    runs = from_app(parse_jsonl(sys.stdin), os.environ["SHIPMATE_APP_ID"])
     v = verdict(runs)
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
         fh.write(f"verdict={v}\n")

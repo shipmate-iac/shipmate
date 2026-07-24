@@ -45,9 +45,12 @@ Humans drive apply behavior for a pull request through PR comments —
 `shipmate apply <env>` — rather than through bespoke UI or external tooling.
 A private GitHub App mints the short-lived token needed to dispatch the apply
 workflow from a comment (events created with the default `GITHUB_TOKEN` never
-trigger other workflows); the App itself has no `checks` or `issues`
-permission, so check-run writes and PR comments stay on the shared
-`github-actions` identity. Authorization requires team membership, an
+trigger other workflows); the same App also authors the apply checks, the
+`shipmate / gate` status, sticky/result comments, and drift issues, each via
+a freshly minted installation token. The plan matrix job's own
+`<stack> / <env>` check-run stays on the shared `github-actions` identity —
+it's the job's own auto check-run, not something the App creates separately.
+Authorization requires team membership, an
 approved and mergeable PR, and a reviewed plan for the PR's current head.
 Comment-ops keeps the entire interaction surface inside the pull request
 that is already the unit of review, with an auditable history of who asked

@@ -3,9 +3,12 @@
 shipmate's comment-ops path (`shipmate apply <env>` in a PR comment) needs a
 private GitHub App to mint a short-lived `workflow_dispatch` token — events
 created with `GITHUB_TOKEN` never trigger other workflows, so the manual
-pre-merge apply cannot be kicked off with the default token. The bot identity
-`shipmate[bot]` is derived automatically from the App name (`shipmate`) once
-it's registered.
+pre-merge apply cannot be kicked off with the default token. The same App
+also authors every apply check, the `shipmate / gate` commit status, the
+sticky plan/result comments, and drift issues — installation tokens minted
+fresh per job, never a long-lived credential in the workflow. The bot
+identity `shipmate[bot]` is derived automatically from the App name
+(`shipmate`) once it's registered.
 
 This is a runbook, not a tutorial: run the commands in order, once per GitHub
 org that will use comment-ops.
@@ -64,7 +67,15 @@ on `GITHUB_REPOSITORY`. Re-run with a different `GITHUB_REPOSITORY` (or use the
 org secret/variable propagation in step 4) to make the credentials available to
 consumer repos too.
 
-## 3. Install the App on each repo that will use comment-ops
+## 3. Upload a logo (optional but recommended)
+
+The manifest flow leaves the App with GitHub's default gray-box avatar. To
+give it a recognizable identity in check-run lists, PR comments, and the
+installations page: App settings (`.../settings/apps/shipmate`) → **Display
+information** → **Upload a logo**. Purely cosmetic — everything above works
+without it.
+
+## 4. Install the App on each repo that will use comment-ops
 
 The App must be **installed** (separately from being registered) on every
 repo that runs `comment-ops.yml` / `dispatch`, e.g. the sample repos:
@@ -82,7 +93,7 @@ Click **Install**, choose **Only select repositories**, and pick:
 (and any other consumer repo that wires up comment-ops). Add repos to the
 installation later from the same page as new consumer repos come online.
 
-## 4. Set the approvers team + propagate credentials
+## 5. Set the approvers team + propagate credentials
 
 Each consumer repo needs `SHIPMATE_APPROVERS_TEAM` (the GitHub team slug whose
 members may run `shipmate apply`) plus the app id/key from step 2. `gh` cannot read
@@ -115,7 +126,7 @@ gh secret set SHIPMATE_APP_PRIVATE_KEY --org <org> --visibility selected \
   --body "$(cat shipmate-app.private-key.pem)"
 ```
 
-## 5. Rotate the private key (on suspicion of compromise)
+## 6. Rotate the private key (on suspicion of compromise)
 
 1. In the App settings (`.../settings/apps/shipmate`), under **Private keys**,
    click **Generate a private key**. GitHub downloads a new PEM; the old key(s)
@@ -137,15 +148,53 @@ gh secret set SHIPMATE_APP_PRIVATE_KEY --org <org> --visibility selected \
 ## Reference: what the App can and can't do
 
 - Permissions: `actions: write`, `pull_requests: write`, `contents: read`,
-  `members: read`. No `checks` permission — check-run writes stay on
-  `GITHUB_TOKEN` (`checks: write`), since check runs are only updatable by
-  the app that created them and every workflow in a repo shares the
-  `github-actions` identity.
+  `members: read`, `checks: write`, `statuses: write`, `issues: write`. The
+  App mints a fresh installation token per job and authors: every
+  `apply / <env> / <stack>` check (create pending, complete on apply), the
+  aggregate `shipmate / gate` commit status, the sticky plan/result comments,
+  and drift issues. The plan matrix job's own `<stack> / <env>` auto
+  check-run stays on the `github-actions` identity — it's the job's own
+  check-run, not something a separate API call creates, so there's nothing
+  for the App to author there.
 - No webhook events (`default_events: []`, `hook_attributes.active: false`) —
   comment-ops is triggered by `on: issue_comment` in the consumer repo's own
   workflow, not by the App receiving a webhook.
 - Not public (`public: false`) — this App is installed only on repos your org
   controls.
+
+## Re-approve after permission changes
+
+Expanding `default_permissions` in `app/manifest.json` (as this project did
+to add `checks`/`statuses`/`issues`) does not take effect immediately for an
+already-installed App. GitHub puts the wider grant in a **pending request**
+that an org owner must approve:
+
+```
+https://github.com/organizations/<org>/settings/apps/shipmate/installations
+```
+
+Open the installation, review the pending permission request, and **Accept**
+it. Until that happens, API calls using the new scopes (e.g. the App's
+`statuses: write` gate POST) fail with a permission error even though the
+manifest and the installed App's token both look correct — the gap is the
+un-approved request, not a code or config bug.
+
+## Key-exposure boundary
+
+The private key is a secret in `SHIPMATE_APP_PRIVATE_KEY`, but the *token*
+minted from it is readable in plaintext by any step in the job that mints it
+— including the `pull_request`-triggered `summary` job, which runs against
+untrusted PR content (the plan text, cell metadata). The
+`integration_id`-pinned gate ruleset (see `docs/branch-protection.md`)
+defends against two specific threats: a supply-chain compromise reached
+*through* that job (a malicious dependency or action stealing the minted
+token to forge a `shipmate / gate` status), and a stray/forked workflow
+minting its own App token outside the reviewed path. It does **not** defend
+against a trusted, write-access insider who already has `secrets: write` on
+the repo — that person can read the PEM directly regardless of any ruleset
+pin. If your threat model includes malicious insiders with write access,
+the App's key does not solve for that; branch protection's pinned
+`integration_id` only closes the *external* forgery path.
 
 ---
 
