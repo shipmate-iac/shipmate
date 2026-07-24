@@ -38,6 +38,38 @@ def test_gate_literal_present_in_every_writer():
         assert GATE in text, f"{rel} is missing the gate literal {GATE!r}"
 
 
+def _gate_writing_run_blocks(text):
+    """Yield each `run:` block (as a single string) that references the gate
+    context AND posts (contains `--input`, a `gh api ... --input` call). A step
+    that merely names the gate in a comment/echo does not count; the writer
+    files each have exactly one such block, but this scans generically instead
+    of assuming a fixed line layout."""
+    blocks = []
+    current = []
+    in_run = False
+    run_indent = None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("run:") or stripped == "run: |":
+            if current:
+                blocks.append("\n".join(current))
+            current = []
+            in_run = True
+            run_indent = len(line) - len(line.lstrip())
+            continue
+        if in_run:
+            indent = len(line) - len(line.lstrip()) if line.strip() else run_indent + 1
+            if line.strip() and indent <= run_indent:
+                blocks.append("\n".join(current))
+                current = []
+                in_run = False
+            else:
+                current.append(line)
+    if current:
+        blocks.append("\n".join(current))
+    return [b for b in blocks if GATE in b and "--input" in b]
+
+
 def test_gate_written_as_commit_status_not_check_run():
     """The gate must be a commit STATUS, not a check-run.
 
@@ -46,20 +78,34 @@ def test_gate_written_as_commit_status_not_check_run():
     rapid re-push). The merge evaluator reads the live suite, finds no gate, and
     blocks the PR forever while the green gate sits in the stale suite. A commit
     status is commit-scoped and immune. Lock every writer onto the statuses API.
+
+    Scoped to the GATE-writing step(s) only (the block that references the
+    `shipmate / gate` context and POSTs it) -- NOT every line in the writer
+    file. `actions/summary` also legitimately creates apply check-runs in a
+    separate step; that step must not be flagged by this guard.
     """
     for rel in WRITERS:
         text = (ENGINE / rel).read_text(encoding="utf-8")
-        assert "statuses/" in text, f"{rel} must POST the gate to the commit statuses API"
-        # A gate POST (`--input`) must never target check-runs again. Reads of
-        # the check-runs listing (`commits/<sha>/check-runs`, no --input) stay.
-        for line in text.splitlines():
-            assert not ("check-runs" in line and "--input" in line), (
-                f"{rel}: gate POST still targets the check-runs API: {line.strip()}"
+        gate_blocks = _gate_writing_run_blocks(text)
+        assert gate_blocks, f"{rel}: no gate-writing run block found (context+POST)"
+        for block in gate_blocks:
+            assert "statuses/" in block, (
+                f"{rel}: gate-writing step must POST to the commit statuses API: {block!r}"
             )
+            for line in block.splitlines():
+                assert not ("check-runs" in line and "--input" in line), (
+                    f"{rel}: gate POST still targets the check-runs API: {line.strip()}"
+                )
 
 
 WORKFLOWS = ENGINE / ".github" / "workflows"
 GATE_WRITER_ACTIONS = ("actions/gate-refresh", "actions/summary")
+CREDENTIALED_ACTIONS = (
+    "actions/gate-refresh",
+    "actions/summary",
+    "actions/apply-cell",
+    "actions/drift-cell",
+)
 
 
 def _job_writes_gate(job):
@@ -78,41 +124,132 @@ def _job_writes_gate(job):
     return False
 
 
-def _grants_statuses_write(job, workflow_perms):
+def _grants_stale_perm(job, workflow_perms):
     # A job-level `permissions:` fully REPLACES the workflow default (GHA
-    # semantics), so a job that sets any permissions must set statuses:write
+    # semantics), so a job that sets any permissions must set the scope
     # itself; only a job that omits `permissions:` inherits the workflow block.
     perms = job.get("permissions", workflow_perms)
     if perms == "write-all":
         return True
-    return isinstance(perms, dict) and perms.get("statuses") == "write"
+    if not isinstance(perms, dict):
+        return False
+    return perms.get("checks") == "write" or perms.get("statuses") == "write"
 
 
-def test_gate_writer_jobs_grant_statuses_write():
-    """Every ENGINE workflow job that writes the gate must grant `statuses: write`.
+def test_no_engine_job_grants_stale_checks_or_statuses_write():
+    """No ENGINE workflow job grants `checks: write` or `statuses: write` on
+    GITHUB_TOKEN any more.
 
-    The gate is a commit status; posting one needs `statuses: write`, not the
-    `checks: write` the check-run era used. A gate-refresh caller left on the old
-    grant (as apply-all.yml was) 403s the status POST at runtime and the gate
-    never completes -- a failure the writer-file tests above cannot see, because
-    the missing grant lives in the *caller* workflow.
-
-    Scope limit: this sweep globs only the engine's own `.github/workflows`. The
-    primary gate writer, `actions/summary`, is invoked exclusively from consumer
-    `plan.yml` (the sample repos), which lives in other repositories and is not
-    reachable from here -- those callers must be migrated to `statuses: write`
-    separately (see docs/branch-protection.md's upgrade note). So this guards the
-    gate-refresh/deploy paths, NOT the summary/plan path.
+    Those two GITHUB_TOKEN scopes are relics of the check-run/GITHUB_TOKEN era.
+    Every writer that needs them now mints a shipmate App installation token
+    instead (App manifest carries `checks: write` + `statuses: write`), so a
+    job-level grant of either scope on GITHUB_TOKEN is stale and should be
+    removed -- it is unused (the writer steps use the App token) and widens the
+    default token's blast radius for no reason. The exception list is empty by
+    design: if a genuine GITHUB_TOKEN need for one of these scopes turns up,
+    that is a real design question, not something this guard should silently
+    exempt.
     """
     offenders = []
     for wf in sorted(WORKFLOWS.glob("*.yml")):
         doc = yaml.safe_load(wf.read_text(encoding="utf-8")) or {}
         workflow_perms = doc.get("permissions")
         for name, job in (doc.get("jobs") or {}).items():
-            if isinstance(job, dict) and _job_writes_gate(job):
-                if not _grants_statuses_write(job, workflow_perms):
-                    offenders.append(f"{wf.name}:{name}")
-    assert not offenders, f"gate-writer job(s) missing `statuses: write`: {offenders}"
+            if isinstance(job, dict) and _grants_stale_perm(job, workflow_perms):
+                offenders.append(f"{wf.name}:{name}")
+    assert not offenders, (
+        f"job(s) still grant a stale GITHUB_TOKEN checks:write/statuses:write: {offenders}"
+    )
+
+
+def _is_reusable_caller(job):
+    uses = job.get("uses") or ""
+    return uses.startswith("ship-iac/shipmate/.github/workflows/") or (
+        uses.startswith("./.github/workflows/")
+    )
+
+
+def _reusable_target_name(uses):
+    # e.g. "ship-iac/shipmate/.github/workflows/apply-env-level.yml@<sha>" -> "apply-env-level.yml"
+    path_part = uses.split("@", 1)[0]
+    return path_part.rsplit("/", 1)[-1]
+
+
+def _declares_app_private_key_secret(workflow_doc):
+    on = workflow_doc.get("on") or workflow_doc.get(True) or {}
+    wc = (on or {}).get("workflow_call") or {}
+    secrets = wc.get("secrets") or {}
+    return "SHIPMATE_APP_PRIVATE_KEY" in secrets
+
+
+def _reusable_caller_offense(wf_name, job_name, job, workflow_docs):
+    """Check one reusable-workflow-caller job; return an offense string, or
+    None if credential-threading into the callee is sound."""
+    target = _reusable_target_name(job.get("uses") or "")
+    target_doc = workflow_docs.get(target)
+    if target_doc is None:
+        # Target lives outside this glob (shouldn't happen for the engine's
+        # own reusable workflows) -- nothing to check here.
+        return None
+    if not _declares_app_private_key_secret(target_doc):
+        # Flag any reusable target missing the secret declaration so a future
+        # caller doesn't silently lose the credential thread.
+        return (
+            f"{wf_name}:{job_name} -> {target} missing "
+            "SHIPMATE_APP_PRIVATE_KEY in on.workflow_call.secrets"
+        )
+    if job.get("secrets") != "inherit":
+        return (
+            f"{wf_name}:{job_name} -> {target}: not using `secrets: inherit` "
+            "(explicit secret mappings must include SHIPMATE_APP_PRIVATE_KEY)"
+        )
+    return None
+
+
+def _credentialed_step_offenses(wf_name, job_name, job):
+    """Check every credentialed-action step in one non-reusable job; return
+    a list of offense strings (empty if all such steps pass both creds)."""
+    offenses = []
+    for step in job.get("steps") or []:
+        uses = step.get("uses") or ""
+        if not any(action in uses for action in CREDENTIALED_ACTIONS):
+            continue
+        with_ = step.get("with") or {}
+        missing = [k for k in ("app-id", "private-key") if k not in with_]
+        if missing:
+            offenses.append(f"{wf_name}:{job_name} ({uses}) missing with: {missing}")
+    return offenses
+
+
+def test_credentialed_action_steps_thread_app_credentials():
+    """Every step calling gate-refresh/summary/apply-cell/drift-cell passes
+    both `app-id` and `private-key` in its `with:` -- these actions each mint
+    their own App installation token and 403 (or silently no-op) without both.
+
+    For a job that is itself a reusable-workflow CALLER (`uses:` points at
+    another `.github/workflows/*.yml` and relies on `secrets: inherit` to
+    forward `SHIPMATE_APP_PRIVATE_KEY` down into it), the credential is
+    threaded structurally rather than passed as a `with:` input -- assert
+    instead that the CALLED workflow declares `SHIPMATE_APP_PRIVATE_KEY` under
+    `on.workflow_call.secrets`, and that the caller uses `secrets: inherit`
+    (not a selective mapping that could omit it).
+    """
+    offenders = []
+    workflow_docs = {
+        wf.name: yaml.safe_load(wf.read_text(encoding="utf-8")) or {}
+        for wf in sorted(WORKFLOWS.glob("*.yml"))
+    }
+    for wf_name, doc in workflow_docs.items():
+        for job_name, job in (doc.get("jobs") or {}).items():
+            if not isinstance(job, dict):
+                continue
+            if _is_reusable_caller(job):
+                offense = _reusable_caller_offense(wf_name, job_name, job, workflow_docs)
+                if offense:
+                    offenders.append(offense)
+            else:
+                offenders.extend(_credentialed_step_offenses(wf_name, job_name, job))
+    assert not offenders, f"credential-threading gap(s): {offenders}"
 
 
 # Assembled so THIS file never contains the retired token as a literal

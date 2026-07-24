@@ -39,7 +39,7 @@ gh api -X POST repos/<owner>/<repo>/rulesets --input - <<'JSON'
   "rules": [
     { "type": "required_status_checks",
       "parameters": {
-        "required_status_checks": [ { "context": "shipmate / gate" } ],
+        "required_status_checks": [ { "context": "shipmate / gate", "integration_id": <SHIPMATE_APP_ID> } ],
         "strict_required_status_checks_policy": true
       } }
   ]
@@ -49,6 +49,16 @@ JSON
 
 `strict_required_status_checks_policy: true` is the "require branches up to date"
 setting above.
+
+`<SHIPMATE_APP_ID>` is the numeric GitHub App id — the same value stored in
+the `SHIPMATE_APP_ID` repo/org variable (see `docs/github-app.md` step 2).
+Pinning `integration_id` makes the required check match a `shipmate / gate`
+status **only** when it was authored by that specific App installation: a
+status of the same name posted by `GITHUB_TOKEN` (the `github-actions`
+identity) or by any other GitHub App does not satisfy the rule and the PR
+stays blocked. Without this pin, the ruleset only matches on `context` and
+any identity that can post a commit status with that exact context string
+can satisfy the required check.
 
 ## Recipe: automerge after apply
 
@@ -101,23 +111,34 @@ once the repo is public or on a paid plan.
 
 ## Upgrading
 
-- **Gate is now a commit status — grant `statuses: write`.** The aggregate gate
-  moved from the check-runs API to the commit-statuses API. Every consumer
-  workflow **job** that runs `actions/summary` or `actions/gate-refresh` must now
-  grant `statuses: write` (previously `checks: write`) — in the **same change**
-  that bumps your pinned engine SHA, or the gate POST 403s and the required
-  `shipmate / gate` status is never reported, blocking every PR. Recommended
-  minimal grants:
-  - `plan.yml` summary job (runs `actions/summary`): `statuses: write` +
-    `checks: read` (the sticky comment lists the per-cell `plan` check-runs to
-    link them) + `pull-requests: write` (the sticky comment itself).
-  - `apply.yml` / apply-dispatch summary job (runs `actions/gate-refresh`):
-    `statuses: write` + `checks: read` (it scans the `apply` check-runs).
-
-  Keep `checks: read` — do not simply swap `checks: write` → `statuses: write`,
-  or the check-runs the comment/scan read will 403 (a silent link degradation on
-  the plan path; a stuck gate on the apply path). The ruleset required-check
-  string does not change: `shipmate / gate` matches a status by context.
+- **Flip `integration_id` in the same change as the engine-SHA bump.** Move
+  the ruleset's required-check `integration_id` from the `github-actions`
+  identity (`15368` on github.com) to the shipmate App's numeric id
+  (`SHIPMATE_APP_ID`) at the same time you bump the pinned engine SHA to a
+  build that authors the gate via the App. Landing the SHA bump first (or the
+  `integration_id` flip first) leaves a window where the writer and the
+  pinned identity disagree and every `shipmate / gate` status is rejected as
+  non-satisfying, blocking all merges until both land together.
+- **Open PRs need a fresh commit or re-plan after the flip.** A PR opened
+  before the upgrade may be carrying: (a) `github-actions`-authored pending
+  `apply / <env> / <stack>` checks that the App-authored `apply-cell` cannot
+  complete (different identity — check-run completion is scoped to the
+  creating app), and (b) an existing `shipmate / gate` status authored by the
+  old identity, which no longer satisfies the newly-pinned
+  `integration_id`. Push a commit (or re-run `plan.yml`) on each open PR after
+  upgrading so a fresh, App-authored set of checks and gate status is
+  produced.
+- **Gate-writer jobs no longer need `statuses: write` / `checks: write` on
+  `GITHUB_TOKEN`.** The App manifest now carries both scopes, so
+  `actions/summary` / `actions/gate-refresh` mint their own installation
+  token instead of relying on the calling job's `GITHUB_TOKEN` permissions.
+  Remove any `statuses: write` / `checks: write` grant from jobs that run
+  these actions, and thread `app-id` + `private-key` into the `with:` of each
+  call (for a reusable-workflow caller job, `secrets: inherit` covers it, as
+  long as the called workflow declares `SHIPMATE_APP_PRIVATE_KEY` under
+  `on.workflow_call.secrets`). A leftover `GITHUB_TOKEN` grant is stale, not
+  harmful by itself, but remove it — the writer step doesn't use it, and it
+  needlessly widens the default token's scope.
 - **Required status check renamed.** If your branch protection currently
   requires the aggregate gate check under its pre-rename name, update it to
   require `shipmate / gate` instead — in the **same change** that bumps your

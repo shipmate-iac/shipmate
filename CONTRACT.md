@@ -173,18 +173,34 @@ input selects the path (set → targeted, empty → bare). Both share the same
 App-minted `workflow_dispatch` mechanism and the same per-env
 `apply-<env>-<stack>` concurrency groups.
 
-The GitHub App used for comment-ops carries exactly this permission set:
-`actions: write`, `pull_requests: write`, `contents: read`, `members: read`.
-It has **no** `checks` permission and **no** `issues` permission — the App
-exists only to mint a `workflow_dispatch` token (events created with the
-default `GITHUB_TOKEN` never trigger other workflows, so a private App is the
-only way to kick off the apply workflow from a comment) and to read team
-membership for authorization. Apply checks are created and completed by the
-apply workflows' own `GITHUB_TOKEN` (the shared `github-actions` identity),
-never by the App — check runs are only updatable by the app that created them,
-and every workflow in a repo shares the `github-actions` identity, so keeping
-check writes on `GITHUB_TOKEN` keeps that identity consistent across the
-pre-merge and post-merge paths.
+The GitHub App carries this permission set: `actions: write`,
+`pull_requests: write`, `contents: read`, `members: read`, `checks: write`,
+`statuses: write`, `issues: write`. Beyond minting the `workflow_dispatch`
+token for comment-ops (events created with the default `GITHUB_TOKEN` never
+trigger other workflows, so a private App is the only way to kick off the
+apply workflow from a comment) and reading team membership for
+authorization, the App now authors every check/status/comment/issue that
+crosses a workflow-run boundary:
+
+- **Apply checks** (`apply / <env> / <stack>`) — created pending by
+  `actions/summary`, completed by `actions/apply-cell` — both mint an App
+  installation token, so completion works across the create/complete
+  workflow-run boundary (check runs are only updatable by the app that
+  created them; using the same App on both sides keeps that identity
+  consistent).
+- **The aggregate gate** (`shipmate / gate`) — created/refreshed by
+  `actions/summary`, completed pre-merge by `actions/gate-refresh`, completed
+  post-merge inline in `deploy.yml` — all three via App token.
+- **The sticky plan comment** and **result comments** — App-authored (marker
+  + any Bot author for the sticky comment's lookup, since a consumer org's
+  App bot login may differ from `shipmate[bot]`).
+- **Drift issues** — opened/updated/closed by `actions/drift-cell` via App
+  token.
+
+The plan matrix job's own `<stack> / <env>` auto check-run is the one
+exception: it's the job's own check-run (GitHub creates it for the job
+itself), not something a separate API call authors, so it necessarily stays
+on the `github-actions` identity regardless of App permissions.
 
 `shipmate apply` and `deploy.yml` share the same per-env, per-stack
 `apply-<env>-<stack>` concurrency group, so exactly one apply ever runs
@@ -273,9 +289,11 @@ identified by the HTML marker written verbatim as the comment's first line:
 
 - `<!-- shipmate:summary -->`
 
-The comment is edited in place on every plan run (comment lookup is
-marker + `github-actions[bot]` author), so GitHub's comment revision history
-doubles as the audit trail of previous plans for the PR.
+The comment is edited in place on every plan run (comment lookup is marker +
+any Bot author — the shipmate App's bot login is derived from the registered
+App name, which a consumer org may have had to slug differently than
+`shipmate[bot]`), so GitHub's comment revision history doubles as the audit
+trail of previous plans for the PR.
 
 Structure, in order: an overview table (one row per planned stack ×
 environment: verdict emoji — 🟢 no changes / 🟡 changes / 🔴 contains

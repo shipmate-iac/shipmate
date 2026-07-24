@@ -48,14 +48,9 @@ runs:
         set -euo pipefail
         [[ "$SHIPMATE_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::head-sha must be a 40-char lowercase hex SHA (got: $SHIPMATE_HEAD_SHA)"; exit 1; }
         python3 "$GITHUB_ACTION_PATH/../../scripts/pending-checks" > bodies.jsonl
-        # Endpoint held in a variable, not inlined into the gh api call below:
-        # this apply-check POST is unrelated to the commit-status gate write
-        # further down in this file and should read as textually distinct
-        # from it.
-        endpoint="repos/$GITHUB_REPOSITORY/check-runs"
         while IFS= read -r body; do
           [ -z "$body" ] && continue
-          printf '%s' "$body" | gh api "$endpoint" --input - >/dev/null
+          printf '%s' "$body" | gh api "repos/$GITHUB_REPOSITORY/check-runs" --input - >/dev/null
         done < bodies.jsonl
 
     - name: Build comment + gate state
