@@ -269,3 +269,34 @@ def test_latest_by_name_default_prefix_unchanged():
         },
     ]
     assert set(ag.latest_by_name(runs)) == {"apply / dev-eu / stacks/app"}
+
+
+def _run_obj(name, status="completed", conclusion="success", id=1, app_id=999):
+    return {
+        "name": name,
+        "status": status,
+        "conclusion": conclusion,
+        "id": id,
+        "app": {"id": app_id},
+    }
+
+
+def test_from_app_filters_foreign_and_missing_app():
+    ours = _run_obj("apply / dev-eu / stacks/app", app_id=999)
+    foreign = _run_obj("apply / dev-eu / stacks/app", id=2, app_id=15368)
+    no_app = {
+        "name": "apply / dev-eu / stacks/app",
+        "status": "completed",
+        "conclusion": "success",
+        "id": 3,
+    }
+    assert ag.from_app([ours, foreign, no_app], "999") == [ours]
+
+
+def test_forged_newer_completed_duplicate_cannot_green_a_pending_name():
+    pending = _run_obj(
+        "apply / dev-eu / stacks/app", status="queued", conclusion=None, id=10, app_id=999
+    )
+    forged = _run_obj("apply / dev-eu / stacks/app", id=11, app_id=15368)
+    runs = ag.from_app([pending, forged], "999")
+    assert ag.verdict(runs) == "pending"

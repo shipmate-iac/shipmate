@@ -13,6 +13,10 @@ verdict to GITHUB_OUTPUT:
 - `no-applies` — the commit has no apply checks at all (nothing to gate on);
                  the caller must leave the gate untouched.
 
+Check-runs are filtered to the shipmate GitHub App's identity (`from_app`,
+env `SHIPMATE_APP_ID`) before verdict is computed, so a same-name run created
+by any other identity can never feed the gate.
+
 The GitHub API returns every historical run of a re-created check name, so
 runs are grouped by name and judged by the newest run per name, ordered by
 check-run id (monotonically increasing with creation, and always present --
@@ -80,6 +84,19 @@ def parse_jsonl(lines):
     return out
 
 
+def from_app(check_runs, app_id):
+    """Keep only check-runs created by the given GitHub App id.
+
+    Check-run writes moved to the shipmate App: a same-name check created by
+    any other identity (github-actions app id 15368, another App) must never
+    feed a gate verdict or a detect work queue — a forged newer completed
+    duplicate would otherwise green a pending name via latest_by_name, and a
+    forged pending one would wedge the gate. Runs with no `app` field are
+    dropped too (fail-closed)."""
+    want = int(app_id)
+    return [r for r in check_runs if ((r.get("app") or {}).get("id")) == want]
+
+
 def verdict(check_runs):
     latest = latest_by_name(check_runs)
     if not latest:
@@ -90,7 +107,7 @@ def verdict(check_runs):
 
 
 def main():
-    runs = parse_jsonl(sys.stdin)
+    runs = from_app(parse_jsonl(sys.stdin), os.environ["SHIPMATE_APP_ID"])
     v = verdict(runs)
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
         fh.write(f"verdict={v}\n")
