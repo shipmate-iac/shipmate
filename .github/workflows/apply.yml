@@ -86,6 +86,7 @@ jobs:
           private-key: ${{ secrets.SHIPMATE_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
+          permission-pull-requests: write
       - name: Result comment via the App
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}

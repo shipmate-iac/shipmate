@@ -43,8 +43,13 @@ runs:
       with:
         app-id: ${{ inputs.app-id }}
         private-key: ${{ inputs.private-key }}
-        owner: ${{ github.repository_owner }}
-        repositories: ${{ github.event.repository.name }}
+        # owner/repositories intentionally omitted: drift-cell runs from a
+        # `schedule` trigger where `github.event.repository` is unpopulated,
+        # so `repositories: github.event.repository.name` would evaluate to
+        # '' -- with `owner` still set, create-github-app-token then falls
+        # back to scoping the token to ALL repos in the installation. Omitting
+        # both inputs makes it default to the current repository regardless
+        # of trigger type (its documented behavior when both are empty).
         permission-issues: write
 
     - name: Restore state

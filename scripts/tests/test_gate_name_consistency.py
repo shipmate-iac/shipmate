@@ -252,6 +252,42 @@ def test_credentialed_action_steps_thread_app_credentials():
     assert not offenders, f"credential-threading gap(s): {offenders}"
 
 
+DETECT_ACTIONS = (
+    "actions/deploy-detect",
+    "actions/apply-detect",
+    "actions/apply-all-detect",
+)
+
+
+def _detect_step_offenses(wf_name, job_name, job):
+    """Check every detect-action step in one job; return a list of offense
+    strings (empty if each such step passes `app-id`)."""
+    offenses = []
+    for step in job.get("steps") or []:
+        uses = step.get("uses") or ""
+        if not any(action in uses for action in DETECT_ACTIONS):
+            continue
+        with_ = step.get("with") or {}
+        if "app-id" not in with_:
+            offenses.append(f"{wf_name}:{job_name} ({uses}) missing with: app-id")
+    return offenses
+
+
+def test_detect_action_steps_thread_app_id():
+    """Every step calling deploy-detect/apply-detect/apply-all-detect passes
+    `app-id` in its `with:` -- these scripts read `os.environ["SHIPMATE_APP_ID"]`
+    and KeyError at runtime without it. Nothing else guards this threading, so a
+    call-site dropping the input would only surface as a runtime crash."""
+    offenders = []
+    for wf in sorted(WORKFLOWS.glob("*.yml")):
+        doc = yaml.safe_load(wf.read_text(encoding="utf-8")) or {}
+        for job_name, job in (doc.get("jobs") or {}).items():
+            if not isinstance(job, dict):
+                continue
+            offenders.extend(_detect_step_offenses(wf.name, job_name, job))
+    assert not offenders, f"detect action(s) missing app-id threading: {offenders}"
+
+
 # Assembled so THIS file never contains the retired token as a literal
 # substring -- writing it out would self-match and the test could never pass.
 RETIRED = "check" + "mate"
