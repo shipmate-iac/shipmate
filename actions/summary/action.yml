@@ -79,6 +79,23 @@ runs:
         fi
         python3 "$GITHUB_ACTION_PATH/../../scripts/summary-comment" < check-runs.jsonl
 
+    - name: Doctor — settings-drift warnings (never blocks)
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.token.outputs.token }}
+        SHIPMATE_APP_ID: ${{ inputs.app-id }}
+        SHIPMATE_CELLS_DIR: ${{ inputs.cells-dir }}
+        SHIPMATE_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      run: |
+        set -euo pipefail
+        if python3 "$GITHUB_ACTION_PATH/../../scripts/doctor" > doctor.md; then
+          if [ -s doctor.md ]; then
+            { echo ""; echo "### doctor"; cat doctor.md; } >> comment.md
+          fi
+        else
+          echo "::warning::doctor probes errored; skipping settings-drift section"
+        fi
+
     - name: Upsert sticky comment
       shell: bash
       env:

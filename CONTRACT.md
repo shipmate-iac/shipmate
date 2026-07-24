@@ -306,6 +306,14 @@ cell's `(stack-path, environment)` pair using the check-name grammar above;
 when the check run cannot be resolved, the link degrades to the workflow-run
 URL.
 
+The comment may additionally carry a trailing `### doctor` section: `scripts/doctor`'s
+read-only settings-drift warnings (a missing/mis-pinned `shipmate / gate` rule,
+a missing GitHub Environment), appended by `actions/summary` after the
+overview table and cell details are built. The section is present only when
+doctor has findings; it never affects the gate verdict and doctor's own
+never-fail design means an appended-warnings failure cannot block the
+comment from posting.
+
 GitHub caps issue-comment bodies at 65,536 characters. The comment is built
 to a smaller budget: each changed cell's section degrades, in order, full
 plan → truncated plan (cut at a line boundary, with a link to the check run

@@ -60,6 +60,18 @@ stays blocked. Without this pin, the ruleset only matches on `context` and
 any identity that can post a commit status with that exact context string
 can satisfy the required check.
 
+## Doctor: settings-drift warnings in the sticky comment
+
+`actions/summary` runs `scripts/doctor` on every plan run and appends its
+findings to the sticky comment under a `### doctor` heading — read-only,
+never blocking. It flags a missing or mis-pinned `shipmate / gate` rule on
+the default branch (no active ruleset requiring it, or one that doesn't pin
+`integration_id` to the shipmate App, or that isn't strict) and any missing
+GitHub Environment (`<env>` / `<env>-apply`) for a tagged-in environment.
+Doctor degrades to a `could not verify` note on an API error and always
+exits 0, so a probe failure (for example, the App token lacking read access
+to `rules/branches` or `environments`) never fails the plan run itself.
+
 ## Recipe: automerge after apply
 
 Because the merge gate is the single `shipmate / gate` check, GitHub's
