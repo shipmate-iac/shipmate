@@ -40,7 +40,7 @@ jobs:
           terramate-version: ${{ vars.TERRAMATE_VERSION }}
           tofu-version: ${{ vars.TOFU_VERSION }}
       - id: d
-        uses: ship-iac/shipmate/actions/apply-all-detect@cc54ebf89eb763a243a0dc2fc2504ba7dbed5b92
+        uses: ship-iac/shipmate/actions/apply-all-detect@6e5b150b4220b59273215b4570ef16f93a30ae66
         with:
           plan-run-id: ${{ inputs.plan_run_id }}
           head-sha: ${{ inputs.ref }}
@@ -50,7 +50,7 @@ jobs:
   envlevel0:
     needs: [detect]
     if: ${{ !failure() && !cancelled() && needs.detect.outputs.envlevel0_empty != 'true' && !contains(join(needs.*.result, ','), 'cancelled') }}
-    uses: ship-iac/shipmate/.github/workflows/apply-env-level.yml@1ddcad409bd388ed437c78522e74cff839c02b20
+    uses: ship-iac/shipmate/.github/workflows/apply-env-level.yml@ccf333a1c13e99a1996f618c5de9efb53f1635df
     permissions: { contents: read, actions: read }
     with:
       waves_json: ${{ needs.detect.outputs.envlevel0_waves }}
@@ -68,7 +68,7 @@ jobs:
   envlevel1:
     needs: [detect, envlevel0]
     if: ${{ !failure() && !cancelled() && needs.detect.outputs.envlevel1_empty != 'true' && !contains(join(needs.*.result, ','), 'cancelled') }}
-    uses: ship-iac/shipmate/.github/workflows/apply-env-level.yml@1ddcad409bd388ed437c78522e74cff839c02b20
+    uses: ship-iac/shipmate/.github/workflows/apply-env-level.yml@ccf333a1c13e99a1996f618c5de9efb53f1635df
     permissions: { contents: read, actions: read }
     with:
       waves_json: ${{ needs.detect.outputs.envlevel1_waves }}
@@ -80,7 +80,7 @@ jobs:
   envlevel2:
     needs: [detect, envlevel0, envlevel1]
     if: ${{ !failure() && !cancelled() && needs.detect.outputs.envlevel2_empty != 'true' && !contains(join(needs.*.result, ','), 'cancelled') }}
-    uses: ship-iac/shipmate/.github/workflows/apply-env-level.yml@1ddcad409bd388ed437c78522e74cff839c02b20
+    uses: ship-iac/shipmate/.github/workflows/apply-env-level.yml@ccf333a1c13e99a1996f618c5de9efb53f1635df
     permissions: { contents: read, actions: read }
     with:
       waves_json: ${{ needs.detect.outputs.envlevel2_waves }}
@@ -92,7 +92,7 @@ jobs:
   envlevel3:
     needs: [detect, envlevel0, envlevel1, envlevel2]
     if: ${{ !failure() && !cancelled() && needs.detect.outputs.envlevel3_empty != 'true' && !contains(join(needs.*.result, ','), 'cancelled') }}
-    uses: ship-iac/shipmate/.github/workflows/apply-env-level.yml@1ddcad409bd388ed437c78522e74cff839c02b20
+    uses: ship-iac/shipmate/.github/workflows/apply-env-level.yml@ccf333a1c13e99a1996f618c5de9efb53f1635df
     permissions: { contents: read, actions: read }
     with:
       waves_json: ${{ needs.detect.outputs.envlevel3_waves }}
@@ -112,7 +112,7 @@ jobs:
     steps:
       - name: Complete gate if every apply check is done
         id: gate
-        uses: ship-iac/shipmate/actions/gate-refresh@cc54ebf89eb763a243a0dc2fc2504ba7dbed5b92
+        uses: ship-iac/shipmate/actions/gate-refresh@6e5b150b4220b59273215b4570ef16f93a30ae66
         with:
           head-sha: ${{ inputs.ref }}
           app-id: ${{ vars.SHIPMATE_APP_ID }}
