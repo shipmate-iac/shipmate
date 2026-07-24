@@ -34,8 +34,8 @@ def _environments(*names):
 
 def test_healthy_repo_emits_nothing(monkeypatch):
     responses = {
-        f"repos/{_REPO}/rules/branches/{_BRANCH}": _gate_rule(),
-        f"repos/{_REPO}/environments": _environments("dev-eu", "dev-eu-apply"),
+        f"repos/{_REPO}/rules/branches/{_BRANCH}?per_page=100": _gate_rule(),
+        f"repos/{_REPO}/environments?per_page=100": _environments("dev-eu", "dev-eu-apply"),
     }
     monkeypatch.setattr(doctor, "_gh_json", lambda path: responses[path])
     assert doctor.warnings(_REPO, _APP_ID, _ENVS, _BRANCH) == []
@@ -43,9 +43,9 @@ def test_healthy_repo_emits_nothing(monkeypatch):
 
 def test_missing_environment_pair_warned(monkeypatch):
     responses = {
-        f"repos/{_REPO}/rules/branches/{_BRANCH}": _gate_rule(),
+        f"repos/{_REPO}/rules/branches/{_BRANCH}?per_page=100": _gate_rule(),
         # dev-eu-apply is missing
-        f"repos/{_REPO}/environments": _environments("dev-eu"),
+        f"repos/{_REPO}/environments?per_page=100": _environments("dev-eu"),
     }
     monkeypatch.setattr(doctor, "_gh_json", lambda path: responses[path])
     out = doctor.warnings(_REPO, _APP_ID, _ENVS, _BRANCH)
@@ -55,8 +55,8 @@ def test_missing_environment_pair_warned(monkeypatch):
 
 def test_gate_rule_wrong_integration_id_warned(monkeypatch):
     responses = {
-        f"repos/{_REPO}/rules/branches/{_BRANCH}": _gate_rule(integration_id=15368),
-        f"repos/{_REPO}/environments": _environments("dev-eu", "dev-eu-apply"),
+        f"repos/{_REPO}/rules/branches/{_BRANCH}?per_page=100": _gate_rule(integration_id=15368),
+        f"repos/{_REPO}/environments?per_page=100": _environments("dev-eu", "dev-eu-apply"),
     }
     monkeypatch.setattr(doctor, "_gh_json", lambda path: responses[path])
     out = doctor.warnings(_REPO, _APP_ID, _ENVS, _BRANCH)
@@ -68,8 +68,10 @@ def test_gate_rule_wrong_integration_id_warned(monkeypatch):
 def test_gate_rule_absent_warned(monkeypatch):
     responses = {
         # no required_status_checks rule at all
-        f"repos/{_REPO}/rules/branches/{_BRANCH}": [{"type": "deletion", "parameters": {}}],
-        f"repos/{_REPO}/environments": _environments("dev-eu", "dev-eu-apply"),
+        f"repos/{_REPO}/rules/branches/{_BRANCH}?per_page=100": [
+            {"type": "deletion", "parameters": {}}
+        ],
+        f"repos/{_REPO}/environments?per_page=100": _environments("dev-eu", "dev-eu-apply"),
     }
     monkeypatch.setattr(doctor, "_gh_json", lambda path: responses[path])
     out = doctor.warnings(_REPO, _APP_ID, _ENVS, _BRANCH)
@@ -79,8 +81,8 @@ def test_gate_rule_absent_warned(monkeypatch):
 
 def test_strict_policy_off_warned(monkeypatch):
     responses = {
-        f"repos/{_REPO}/rules/branches/{_BRANCH}": _gate_rule(strict=False),
-        f"repos/{_REPO}/environments": _environments("dev-eu", "dev-eu-apply"),
+        f"repos/{_REPO}/rules/branches/{_BRANCH}?per_page=100": _gate_rule(strict=False),
+        f"repos/{_REPO}/environments?per_page=100": _environments("dev-eu", "dev-eu-apply"),
     }
     monkeypatch.setattr(doctor, "_gh_json", lambda path: responses[path])
     out = doctor.warnings(_REPO, _APP_ID, _ENVS, _BRANCH)

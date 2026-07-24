@@ -124,6 +124,74 @@ def _job_writes_gate(job):
     return False
 
 
+def _inline_gate_steps(job):
+    """Steps within a job that inline-POST the gate status (statuses/ + GATE
+    in the same run block) -- the deploy.yml style writer, as opposed to a
+    job that delegates to the gate-refresh/summary composite actions (which
+    mint and use their own App token internally)."""
+    return [
+        step
+        for step in (job.get("steps") or [])
+        if "statuses/" in (step.get("run") or "") and GATE in (step.get("run") or "")
+    ]
+
+
+def _app_statuses_token_step_id(job):
+    """The id of a step in the job that mints a shipmate App installation
+    token scoped `permission-statuses: write`, or None if there is none."""
+    for step in job.get("steps") or []:
+        if "create-github-app-token" not in (step.get("uses") or ""):
+            continue
+        if (step.get("with") or {}).get("permission-statuses") == "write":
+            return step.get("id")
+    return None
+
+
+def test_inline_gate_write_job_mints_app_statuses_token():
+    """Every job that writes the gate INLINE (a `run:` step posting to the
+    commit-statuses API with the `shipmate / gate` context, rather than
+    delegating to the gate-refresh/summary composite actions) must mint its
+    own shipmate App installation token scoped `permission-statuses: write`,
+    and the inline POST step's `GH_TOKEN` must be that minted token -- never
+    the ambient `github.token`, which cannot write a commit status pinned by
+    `integration_id` to the shipmate App (see test_no_engine_job_grants_stale_
+    checks_or_statuses_write for the GITHUB_TOKEN-scope side of this).
+
+    Uses `_job_writes_gate` to locate candidate jobs (it detects exactly this:
+    a gate-refresh/summary delegate OR an inline statuses/+GATE run step),
+    then narrows to the inline-writer jobs specifically -- a job that merely
+    delegates to gate-refresh/summary is skipped here, since those actions
+    mint and scope their own token internally.
+    """
+    offenders = []
+    for wf in sorted(WORKFLOWS.glob("*.yml")):
+        doc = yaml.safe_load(wf.read_text(encoding="utf-8")) or {}
+        for job_name, job in (doc.get("jobs") or {}).items():
+            if not isinstance(job, dict) or not _job_writes_gate(job):
+                continue
+            inline_steps = _inline_gate_steps(job)
+            if not inline_steps:
+                continue  # delegates to gate-refresh/summary; not this guard's concern
+            token_id = _app_statuses_token_step_id(job)
+            if token_id is None:
+                offenders.append(
+                    f"{wf.name}:{job_name}: no create-github-app-token step scoped "
+                    "permission-statuses: write"
+                )
+                continue
+            expected = "${{ steps." + token_id + ".outputs.token }}"
+            for step in inline_steps:
+                got = (step.get("env") or {}).get("GH_TOKEN")
+                if got != expected:
+                    offenders.append(
+                        f"{wf.name}:{job_name}: inline gate-POST step GH_TOKEN is "
+                        f"{got!r}, expected the minted App token {expected!r}"
+                    )
+    assert not offenders, (
+        f"inline gate-writing job(s) not using a minted App statuses token: {offenders}"
+    )
+
+
 def _grants_stale_perm(job, workflow_perms):
     # A job-level `permissions:` fully REPLACES the workflow default (GHA
     # semantics), so a job that sets any permissions must set the scope

@@ -93,6 +93,11 @@ def from_app(check_runs, app_id):
     duplicate would otherwise green a pending name via latest_by_name, and a
     forged pending one would wedge the gate. Runs with no `app` field are
     dropped too (fail-closed)."""
+    if not app_id:
+        raise SystemExit(
+            "::error::SHIPMATE_APP_ID is empty — set the SHIPMATE_APP_ID repo/org "
+            "variable to the shipmate App id (see docs/github-app.md)."
+        )
     want = int(app_id)
     return [r for r in check_runs if ((r.get("app") or {}).get("id")) == want]
 

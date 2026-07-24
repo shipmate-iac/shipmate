@@ -37,7 +37,7 @@ GATE = "shipmate / gate"
 
 
 def _gate_rule_warnings(repo, app_id, default_branch):
-    rules = _gh_json(f"repos/{repo}/rules/branches/{default_branch}")
+    rules = _gh_json(f"repos/{repo}/rules/branches/{default_branch}?per_page=100")
     for rule in rules:
         if rule.get("type") != "required_status_checks":
             continue
@@ -65,7 +65,11 @@ def _gate_rule_warnings(repo, app_id, default_branch):
 
 
 def _environment_warnings(repo, envs):
-    names = {e["name"] for e in _gh_json(f"repos/{repo}/environments").get("environments", [])}
+    # per_page=100: one page covers >=50 logical env pairs; bm.gh_json does not multi-page merge.
+    names = {
+        e["name"]
+        for e in _gh_json(f"repos/{repo}/environments?per_page=100").get("environments", [])
+    }
     out = []
     for env in sorted(envs):
         for needed in (env, f"{env}-apply"):

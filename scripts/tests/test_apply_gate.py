@@ -303,6 +303,15 @@ def test_forged_newer_completed_duplicate_cannot_green_a_pending_name():
     assert ag.verdict(runs) == "pending"
 
 
+def test_from_app_empty_app_id_fails_loud():
+    # An unset SHIPMATE_APP_ID renders as '' -- int('') must not raw-traceback
+    # (ValueError) and take down the whole detect/gate/apply run; fail loud
+    # with a message naming the variable instead.
+    runs = [_run_obj("apply / dev-eu / stacks/app")]
+    with pytest.raises(SystemExit, match="SHIPMATE_APP_ID"):
+        ag.from_app(runs, "")
+
+
 def test_app_done_names_excludes_foreign_app_completed():
     # The real guard for detect scripts' main(): if app_done_names ever stops
     # calling from_app internally, this must go red. A foreign-App (15368,
