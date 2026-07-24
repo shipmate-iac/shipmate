@@ -1,5 +1,5 @@
 name: shipmate drift-cell
-description: Plan one stack x env; open/update a drift Issue on changes, auto-close it when clean.
+description: Plan one stack x env; open/update a drift Issue on changes, auto-close it when clean. Drift Issues are authored by the shipmate App.
 inputs:
   stack:
     description: Stack path, e.g. stacks/app.
@@ -13,13 +13,16 @@ inputs:
   state-path:
     description: Flavor state path, e.g. stacks/app/.state.
     required: true
-  github-token:
-    description: GITHUB_TOKEN with issues:write.
-    required: true
   slack-webhook:
     description: Optional Slack webhook URL; drift is posted when set.
     required: false
     default: ""
+  app-id:
+    description: shipmate App id (a repo/org variable, not a secret).
+    required: true
+  private-key:
+    description: shipmate App private key (from a repo/org secret).
+    required: true
 runs:
   using: composite
   steps:
@@ -33,6 +36,16 @@ runs:
         slug=$(printf '%s' "$STACK" | tr / -)
         [[ "$slug" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::stack path produced invalid slug"; exit 1; }
         echo "slug=$slug" >> "$GITHUB_OUTPUT"
+
+    - name: Mint App installation token
+      id: token
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ github.event.repository.name }}
+        permission-issues: write
 
     - name: Restore state
       uses: ship-iac/shipmate/actions/state@cc54ebf89eb763a243a0dc2fc2504ba7dbed5b92 # pinned to a commit on main
@@ -58,7 +71,7 @@ runs:
     - name: Upsert / close drift issue
       shell: bash
       env:
-        GH_TOKEN: ${{ inputs.github-token }}
+        GH_TOKEN: ${{ steps.token.outputs.token }}
         ENV: ${{ inputs.env }}
         STACK_NAME: ${{ inputs.stack-name }}
         DRIFTED: ${{ steps.plan.outputs.changed }}
