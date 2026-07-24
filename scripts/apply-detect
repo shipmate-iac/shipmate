@@ -174,7 +174,9 @@ def main():
             f"repos/{repo}/commits/{head}/check-runs?filter=all&per_page=100",
         ]
     )
-    checks = ag.parse_jsonl(checks_jsonl.splitlines())
+    # Only App-authored apply checks count: a forged same-name check from any
+    # other identity must not mark work done (see apply-gate.from_app).
+    checks = ag.from_app(ag.parse_jsonl(checks_jsonl.splitlines()), os.environ["SHIPMATE_APP_ID"])
     # Shared with apply-gate: a name is done only if its *latest* run is
     # completed with a good conclusion — not merely "some run of this name
     # ever completed" (which would wedge on a failed/superseded run).

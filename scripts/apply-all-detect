@@ -87,7 +87,11 @@ def main():
             f"repos/{repo}/commits/{head}/check-runs?filter=all&per_page=100",
         ]
     )
-    completed = ag.done_names(ag.parse_jsonl(checks_jsonl.splitlines()))
+    # Only App-authored apply checks count: a forged same-name check from any
+    # other identity must not mark work done (see apply-gate.from_app).
+    completed = ag.done_names(
+        ag.from_app(ag.parse_jsonl(checks_jsonl.splitlines()), os.environ["SHIPMATE_APP_ID"])
+    )
     pending = ad.filter_pending(cells, completed)
 
     order = eo.read_env_order()

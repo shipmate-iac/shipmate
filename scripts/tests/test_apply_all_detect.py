@@ -82,6 +82,26 @@ def test_partition_applied_explicit_env_blocks_nothing():
     assert excluded == [] and skipped == []
 
 
+def test_foreign_app_completed_check_stays_pending():
+    # A completed+success check created by a foreign identity (github-actions,
+    # app id 15368) must not count as done once SHIPMATE_APP_ID scopes the
+    # detect to the shipmate App (999) -- main() wraps parse_jsonl in
+    # ag.from_app before ag.done_names; reproduce that composition here.
+    cells = [{"stack": "stacks/app", "environment": "dev-eu"}]
+    checks = [
+        {
+            "name": "apply / dev-eu / stacks/app",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-07-18T10:00:00Z",
+            "id": 1,
+            "app": {"id": 15368},
+        },
+    ]
+    done = aad.ag.done_names(aad.ag.from_app(checks, "999"))
+    assert aad.ad.filter_pending(cells, done) == cells
+
+
 def test_reuses_single_sourced_helpers():
     # Workset matching, pending filter, env-level bucketing and the done
     # predicate must come from the existing single-sourced implementations,
