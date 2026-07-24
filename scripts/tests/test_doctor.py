@@ -89,12 +89,19 @@ def test_strict_policy_off_warned(monkeypatch):
 
 
 def test_probe_403_degrades_to_note_not_failure(monkeypatch):
-    # rules/branches probe raises (simulating a 403); environments probe
-    # still succeeds and its own finding must still surface alongside the
-    # degrade note -- one probe failing must not swallow the other.
+    # rules/branches probe raises the REAL failure type: bm.gh_json (via
+    # build-matrix's _run) hard-fails a nonzero `gh api` exit with
+    # `raise SystemExit(...)`, not a plain Exception -- SystemExit derives
+    # from BaseException, so a catch of only `except Exception` would let
+    # this propagate right past warnings(). This test simulates that exact
+    # 403-on-rules/branches case. The environments probe still succeeds and
+    # its own finding must still surface alongside the degrade note -- one
+    # probe failing must not swallow the other, and no exception may escape
+    # warnings() (no pytest.raises here -- a regression fails this test with
+    # an uncaught SystemExit error, not a silent pass).
     def fake_gh_json(path):
         if "rules/branches" in path:
-            raise RuntimeError("403 Forbidden")
+            raise SystemExit("::error::command failed (1): gh api ...")
         return _environments("dev-eu")  # dev-eu-apply missing -> its own warning
 
     monkeypatch.setattr(doctor, "_gh_json", fake_gh_json)
@@ -102,3 +109,17 @@ def test_probe_403_degrades_to_note_not_failure(monkeypatch):
     assert len(out) == 2
     assert any("could not verify" in line and "probe skipped" in line for line in out)
     assert any("dev-eu-apply" in line for line in out)
+
+
+def test_probe_generic_exception_degrades_to_note(monkeypatch):
+    # Non-SystemExit failures (e.g. a network error inside _run before it
+    # even gets to check the return code) must degrade the same way.
+    def fake_gh_json(path):
+        if "rules/branches" in path:
+            raise RuntimeError("connection reset")
+        return _environments("dev-eu", "dev-eu-apply")
+
+    monkeypatch.setattr(doctor, "_gh_json", fake_gh_json)
+    out = doctor.warnings(_REPO, _APP_ID, _ENVS, _BRANCH)
+    assert len(out) == 1
+    assert "could not verify" in out[0] and "probe skipped" in out[0]
