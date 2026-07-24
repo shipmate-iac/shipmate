@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+"""Emit `POST /check-runs` bodies (JSONL on stdout) for every planned cell.
+
+Relocated from plan-cell: the summary job creates ALL pending apply checks
+with ONE App installation token, so the App private key never enters the
+plan matrix cells (they execute PR-head code) and a 256-cell run mints one
+token, not 256. Body semantics are byte-identical to the old plan-cell step:
+changed cells get a queued "apply pending" check, no-change cells a
+completed/neutral "no changes" check; external_id carries the TF_VAR
+fingerprint either way. The check name uses the stack PATH so deploy-detect
+(which only has the path) reconstructs it exactly.
+"""
+
+import json
+import os
+import pathlib
+
+
+def bodies(cells_dir, head_sha):
+    out = []
+    for cj in sorted(pathlib.Path(cells_dir).glob("cell-summary.*/cell.json")):
+        cell = json.loads(cj.read_text(encoding="utf-8"))
+        if "fingerprint" not in cell:
+            raise SystemExit(
+                f"::error::{cj} has no 'fingerprint' key — plan-cell and summary "
+                "are from mismatched engine revisions; re-run the plan."
+            )
+        body = {
+            "name": f"apply / {cell['environment']} / {cell['stack_path']}",
+            "head_sha": head_sha,
+            "status": "queued",
+            "external_id": cell["fingerprint"],
+            "output": {
+                "title": "apply pending",
+                "summary": "Waiting to be applied. Merge after apply completes "
+                "for this stack x environment.",
+            },
+        }
+        if not cell["changed"]:
+            body["status"] = "completed"
+            body["conclusion"] = "neutral"
+            body["output"] = {
+                "title": "no changes",
+                "summary": "Plan produced no changes for this stack x environment.",
+            }
+        out.append(body)
+    return out
+
+
+def main():
+    head = os.environ["SHIPMATE_HEAD_SHA"]
+    cells = os.environ.get("SHIPMATE_CELLS_DIR", "cells")
+    for body in bodies(cells, head):
+        print(json.dumps(body))
+
+
+if __name__ == "__main__":
+    main()
