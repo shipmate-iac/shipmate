@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+"""shipmate doctor: read-only GitHub-settings drift probes.
+
+Emits markdown warning lines (stdout) for the sticky comment; prints nothing
+when healthy. NEVER fails the run: a probe error becomes a 'could not verify'
+note — doctor guards onboarding, it must not take down the plan path.
+
+Probes:
+- gate ruleset on the default branch: a required_status_checks rule whose
+  contexts include 'shipmate / gate' pinned to integration_id == the shipmate
+  App id, with strict (up-to-date) policy on.
+- GitHub Environment pair (<env>, <env>-apply) exists for every planned env.
+"""
+
+import importlib.util
+import json
+import os
+import pathlib
+import sys
+from importlib.machinery import SourceFileLoader
+
+_D = pathlib.Path(__file__).resolve().parent
+
+
+def _load(fname):
+    loader = SourceFileLoader(fname.replace("-", "_"), str(_D / fname))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+bm = _load("build-matrix")
+_gh_json = bm.gh_json
+
+GATE = "shipmate / gate"
+
+
+def _gate_rule_warnings(repo, app_id, default_branch):
+    rules = _gh_json(f"repos/{repo}/rules/branches/{default_branch}")
+    for rule in rules:
+        if rule.get("type") != "required_status_checks":
+            continue
+        params = rule.get("parameters", {})
+        for chk in params.get("required_status_checks", []):
+            if chk.get("context") != GATE:
+                continue
+            out = []
+            if chk.get("integration_id") != int(app_id):
+                out.append(
+                    f"gate ruleset does not pin `integration_id` to the shipmate App "
+                    f"(found {chk.get('integration_id')!r}) — a forged `{GATE}` status "
+                    "from another identity would satisfy the required check."
+                )
+            if not params.get("strict_required_status_checks_policy"):
+                out.append(
+                    "gate ruleset does not require branches to be up to date "
+                    "(strict) — plans can go stale against the base before merge."
+                )
+            return out
+    return [
+        f"no active ruleset requires `{GATE}` on `{default_branch}` — "
+        "merges are not gated (see docs/branch-protection.md)."
+    ]
+
+
+def _environment_warnings(repo, envs):
+    names = {e["name"] for e in _gh_json(f"repos/{repo}/environments").get("environments", [])}
+    out = []
+    for env in sorted(envs):
+        for needed in (env, f"{env}-apply"):
+            if needed not in names:
+                out.append(
+                    f"GitHub Environment `{needed}` does not exist — stacks tagged "
+                    f"`env:{env}` cannot plan/apply (create it and set TF_VAR_* vars)."
+                )
+    return out
+
+
+def warnings(repo, app_id, envs, default_branch):
+    out = []
+    for probe in (
+        lambda: _gate_rule_warnings(repo, app_id, default_branch),
+        lambda: _environment_warnings(repo, envs),
+    ):
+        try:
+            out.extend(probe())
+        except Exception as e:  # noqa: BLE001 - doctor must never fail the run
+            out.append(f"doctor could not verify a setting ({e}) — probe skipped.")
+    return out
+
+
+def main():
+    repo = os.environ["GITHUB_REPOSITORY"]
+    app_id = os.environ["SHIPMATE_APP_ID"]
+    default_branch = os.environ["SHIPMATE_DEFAULT_BRANCH"]
+    cells = pathlib.Path(os.environ.get("SHIPMATE_CELLS_DIR", "cells"))
+    envs = {
+        json.loads(cj.read_text(encoding="utf-8"))["environment"]
+        for cj in cells.glob("cell-summary.*/cell.json")
+    }
+    for line in warnings(repo, app_id, envs, default_branch):
+        print(f"- :warning: {line}")
+
+
+if __name__ == "__main__":
+    main()
+    sys.exit(0)
